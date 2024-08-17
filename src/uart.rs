@@ -323,6 +323,13 @@ impl<'d, T: BasicInstance> core::fmt::Write for UartTx<'d, T> {
     }
 }
 
+impl<'d, T: BasicInstance> core::fmt::Write for Uart<'d, T> {
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        self.blocking_write(s.as_bytes()).unwrap();
+        Ok(())
+    }
+}
+
 fn configure(
     rb: &pac::uart0::RegisterBlock,
     config: &Config,
