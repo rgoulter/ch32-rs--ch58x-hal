@@ -1,38 +1,40 @@
 #![no_std]
 #![no_main]
 
+use core::cell::RefCell;
+use critical_section::Mutex;
+
 use ch58x_hal as hal;
-use hal::gpio::{Level, Output, OutputDrive};
 use hal::peripherals;
 use hal::rtc::Rtc;
-use hal::uart::Uart;
+use hal::uart::{UartTx, Uart};
 use qingke_rt::highcode;
 
-static mut SERIAL: Option<Uart<peripherals::UART1>> = None;
+static G_SERIAL: Mutex<RefCell<Option<UartTx<peripherals::UART1>>>> = Mutex::new(RefCell::new(None));
 
 macro_rules! println {
     ($($arg:tt)*) => {
-        unsafe {
+        critical_section::with(|cs| {
             use core::fmt::Write;
             use core::writeln;
 
-            if let Some(uart) = SERIAL.as_mut() {
+            if let Some(uart) = G_SERIAL.borrow_ref_mut(cs).as_mut() {
                 writeln!(uart, $($arg)*).unwrap();
             }
-        }
+        });
     }
 }
 
 macro_rules! print {
     ($($arg:tt)*) => {
-        unsafe {
+        critical_section::with(|cs| {
             use core::fmt::Write;
             use core::write;
 
-            if let Some(uart) = SERIAL.as_mut() {
+            if let Some(uart) = G_SERIAL.borrow_ref_mut(cs).as_mut() {
                 write!(uart, $($arg)*).unwrap();
             }
-        }
+        });
     }
 }
 
@@ -56,11 +58,12 @@ fn main() -> ! {
     let mut config = hal::Config::default();
     config.clock.use_pll_60mhz().enable_lse();
     let p = hal::init(config);
-
     let uart = Uart::new(p.UART1, p.PA9, p.PA8, Default::default()).unwrap();
-    unsafe {
-        SERIAL.replace(uart);
-    }
+    let (tx, mut rx) = uart.split();
+
+    critical_section::with(|cs| {
+        G_SERIAL.replace(cs, Some(tx));
+    });
 
     let rtc = Rtc::new(p.RTC);
 
@@ -71,11 +74,7 @@ fn main() -> ! {
     println!("Now, type something to echo:\r");
 
     loop {
-        unsafe {
-            if let Some(uart) = SERIAL.as_mut() {
-                let b = nb::block!(uart.nb_read()).unwrap();
-                print!("{}", b as char);
-            }
-        }
+        let b = nb::block!(rx.nb_read()).unwrap();
+        print!("{}", b as char);
     }
 }
