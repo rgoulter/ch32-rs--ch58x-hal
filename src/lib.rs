@@ -24,6 +24,7 @@ pub mod sysctl;
 pub mod systick;
 pub mod timer;
 pub mod uart;
+pub mod usb;
 
 pub mod interrupt;
 pub mod isp;
