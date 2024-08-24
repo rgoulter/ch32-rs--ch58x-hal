@@ -26,6 +26,10 @@ use usb::{
     MASK_UEP_T_RES,
 };
 use usb::{
+   UIS_TOKEN_IN,
+   UIS_TOKEN_OUT,
+};
+use usb::{
     USB_REQ_TYP_MASK,
     USB_REQ_TYP_STANDARD,
 };
@@ -35,9 +39,17 @@ use usb::{
     USB_REQ_RECIP_ENDP,
 };
 use usb::{
-    USB_GET_DESCRIPTOR,
-    USB_SET_ADDRESS,
+    USB_GET_STATUS,
+    USB_CLEAR_FEATURE,
     USB_SET_FEATURE,
+    USB_SET_ADDRESS,
+    USB_GET_DESCRIPTOR,
+    USB_SET_DESCRIPTOR,
+    USB_GET_CONFIGURATION,
+    USB_SET_CONFIGURATION,
+    USB_GET_INTERFACE,
+    USB_SET_INTERFACE,
+    USB_SYNCH_FRAME,
 };
 use usb::{
     HID_SET_IDLE,
@@ -46,8 +58,15 @@ use usb::{
     HID_GET_IDLE,
     HID_GET_PROTOCOL,
 };
+use usb::USB_SETUP_REQ;
 use usb::{
-    USB_SETUP_REQ,
+    USB_DESCR_TYP_DEVICE,
+    USB_DESCR_TYP_CONFIG,
+    USB_DESCR_TYP_STRING,
+    USB_DESCR_TYP_QUALIF,
+    USB_DESCR_TYP_SPEED,
+    USB_DESCR_TYP_HID,
+    USB_DESCR_TYP_REPORT,
 };
 
 use qingke_rt::highcode;
@@ -251,14 +270,10 @@ fn USB_DeviceInit() {
 fn USB_DevTransProcess() {
     unsafe {
         let mut len: u8 = 0;
-        let mut chtype: u8;
-        let mut intflag: u8;
-        let mut errflag: u8 = 0;
 
         let usb = peripherals::USB::steal();
 
         let int_fg = usb.int_fg().read();
-        intflag = int_fg.bits();
 
         if int_fg.uif_transfer().bit_is_set() {
             let int_st = usb.int_st().read();
@@ -408,10 +423,9 @@ fn USB_DevTransProcess() {
                 let pSetupReqPak: &USB_SETUP_REQ = EP0_Databuf.0.as_ptr().cast::<USB_SETUP_REQ>().as_ref().unwrap();
                 SetupReqLen = pSetupReqPak.wLength;
                 SetupReqCode = pSetupReqPak.bRequest;
-                chtype = pSetupReqPak.bRequestType;
 
                 len = 0;
-                errflag = 0;
+                let mut errflag: u8 = 0;
 
                 if (pSetupReqPak.bRequestType & USB_REQ_TYP_MASK) != USB_REQ_TYP_STANDARD {
                     /* Non-standard requests */
@@ -737,7 +751,7 @@ fn USB_DevTransProcess() {
                         w.uep_t_tog().set_bit()
                     });
                 } else {
-                    if (chtype & 0x80) > 0 { // upload
+                    if (pSetupReqPak.bRequestType & 0x80) > 0 { // upload
                         len = if (SetupReqLen as u8 > DevEP0SIZE) { DevEP0SIZE } else { SetupReqLen as u8 };
                         SetupReqLen -= len as u16;
                     } else {
@@ -776,7 +790,7 @@ fn USB_DevTransProcess() {
             }
             usb.int_fg().write_with_zero(|w| w.uif_suspend().set_bit());
         } else {
-            usb.int_fg().write_with_zero(|w| w.bits(intflag) );
+            usb.int_fg().modify(|r, w| w.bits(r.bits()) );
         }
     }
 }
