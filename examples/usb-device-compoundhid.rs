@@ -127,13 +127,11 @@ const MouseRepDesc: [u8; 52] = [
 ];
 
 
-// /**********************************************************/
+/**********************************************************/
 static mut DevConfig: u8 = 0;
 static mut Ready: u8 = 0;
 static mut SetupReqCode: u8 = 0;
 static mut SetupReqLen: u16 = 0;
-// pDescr is Mutex Refcell of *const u8
-// static pDescr: Mutex<RefCell<Option<*const u8>>> = Mutex::new(RefCell::new(None));
 static mut pDescr: &[u8] = &[];
 static mut Report_Value: [u8; USB_INTERFACE_MAX_INDEX as usize + 1] = [0x00; USB_INTERFACE_MAX_INDEX as usize + 1];
 static mut Idle_Value: [u8; USB_INTERFACE_MAX_INDEX as usize + 1] = [0x00; USB_INTERFACE_MAX_INDEX as usize + 1];
