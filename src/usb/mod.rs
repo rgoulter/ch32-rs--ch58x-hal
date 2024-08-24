@@ -3,6 +3,8 @@
 
 pub const RB_UEP_AUTO_TOG: u8 = 0x10;      // enable automatic toggle after successful transfer completion on endpoint 1/2/3: 0=manual toggle, 1=automatic toggle
 
+pub const MASK_UEP_R_RES: u8 =     0x0C;     // bit mask of handshake response type for USB endpoint X receiving (OUT)
+
 // RB_UEP_R_RES1 & RB_UEP_R_RES0: handshake response type for USB endpoint X receiving (OUT)
 //   00: ACK (ready)
 //   01: no response, time out to host, for non-zero endpoint isochronous transactions
@@ -17,11 +19,7 @@ pub const UEP_R_RES_STALL: u8 = 0x0C;
 pub const RB_UEP_R_TOG: u8 =       0x80;     // expected data toggle flag of USB endpoint X receiving (OUT): 0=DATA0, 1=DATA1
 pub const RB_UEP_T_TOG: u8 =       0x40;     // prepared data toggle flag of USB endpoint X transmittal (IN): 0=DATA0, 1=DATA1
 
-pub const RB_UEP_T_RES1: u8 =      0x02;     // handshake response type high bit for USB endpoint X transmittal (IN)
-pub const RB_UEP_T_RES0: u8 =      0x01;     // handshake response type low bit for USB endpoint X transmittal (IN)
 pub const MASK_UEP_T_RES: u8 =     0x03;     // bit mask of handshake response type for USB endpoint X transmittal (IN)
-
-pub const MASK_UEP_R_RES: u8 =     0x0C;     // bit mask of handshake response type for USB endpoint X receiving (OUT)
 
 // bUEP_T_RES1 & bUEP_T_RES0: handshake response type for USB endpoint X transmittal (IN)
 //   00: DATA0 or DATA1 then expecting ACK (ready)

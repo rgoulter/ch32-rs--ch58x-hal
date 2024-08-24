@@ -267,8 +267,6 @@ fn USB_DeviceInit() {
 
 fn USB_DevTransProcess() {
     unsafe {
-        let mut len: u8 = 0;
-
         let usb = peripherals::USB::steal();
 
         let int_fg = usb.int_fg().read();
@@ -283,7 +281,7 @@ fn USB_DevTransProcess() {
                     (UIS_TOKEN_IN, 0) => {
                         match SetupReqCode as u8 {
                             USB_GET_DESCRIPTOR => {
-                                len = if (SetupReqLen as u8) >= DevEP0SIZE { DevEP0SIZE } else { SetupReqLen as u8 };
+                                let len: u8 = if (SetupReqLen as u8) >= DevEP0SIZE { DevEP0SIZE } else { SetupReqLen as u8 };
                                 EP0_Databuf.0[..len as usize].copy_from_slice(&pDescr[..len as usize]);
                                 SetupReqLen -= len as u16;
                                 pDescr = &pDescr[len as usize..];
@@ -315,7 +313,7 @@ fn USB_DevTransProcess() {
                     }
 
                     (UIS_TOKEN_OUT, 0) => {
-                        len = usb.rx_len().read().bits();
+                        // len = usb.rx_len().read().bits();
                         if SetupReqCode == 0x09 {
                             println!("[{}] Num Lock\r", if EP0_Databuf.0[0] & (1 << 0) != 0 { "*" } else { " " });
                             println!("[{}] Caps Lock\r", if EP0_Databuf.0[0] & (1 << 1) != 0 { "*" } else { " " });
@@ -329,7 +327,7 @@ fn USB_DevTransProcess() {
                             usb.uep1_ctrl__r8_uh_setup().modify(|r, w| {
                                 w.uep_r_tog__rb_uh_pre_pid_en().bit(r.uep_r_tog__rb_uh_pre_pid_en().bit() ^ true)
                             });
-                            len = usb.rx_len().read().bits();
+                            // len = usb.rx_len().read().bits();
                             // DevEP1_OUT_Deal(len); // TODO
                         }
                     }
@@ -349,7 +347,7 @@ fn USB_DevTransProcess() {
                             usb.uep2_ctrl_r8_uh_rx_ctrl().modify(|r, w| {
                                 w.uep_r_tog__rb_uh_r_tog().bit(r.uep_r_tog__rb_uh_r_tog().bit() ^ true)
                             });
-                            len = usb.rx_len().read().bits();
+                            // len = usb.rx_len().read().bits();
                             // DevEP2_OUT_Deal(len); // TODO
                         }
                     }
@@ -369,7 +367,7 @@ fn USB_DevTransProcess() {
                             usb.uep3_ctrl__r8_uh_tx_ctrl().modify(|r, w| {
                                 w.uep_r_tog().bit(r.uep_r_tog().bit() ^ true)
                             });
-                            len = usb.rx_len().read().bits();
+                            // len = usb.rx_len().read().bits();
                             // DevEP3_OUT_Deal(len); // TODO
                         }
                     }
@@ -389,7 +387,7 @@ fn USB_DevTransProcess() {
                             usb.uep4_ctrl().modify(|r, w| {
                                 w.uep_r_tog().bit(r.uep_r_tog().bit() ^ true)
                             });
-                            len = usb.rx_len().read().bits();
+                            // len = usb.rx_len().read().bits();
                             // DevEP4_OUT_Deal(len); // TODO
                         }
                     }
@@ -422,7 +420,7 @@ fn USB_DevTransProcess() {
                 SetupReqLen = pSetupReqPak.wLength;
                 SetupReqCode = pSetupReqPak.bRequest;
 
-                len = 0;
+                let mut len: u8 = 0;
                 let mut errflag: u8 = 0;
 
                 if (pSetupReqPak.bRequestType & USB_REQ_TYP_MASK) != USB_REQ_TYP_STANDARD {
@@ -749,6 +747,7 @@ fn USB_DevTransProcess() {
                         w.uep_t_tog().set_bit()
                     });
                 } else {
+                    let mut len: u8 = 0;
                     if (pSetupReqPak.bRequestType & 0x80) > 0 { // upload
                         len = if (SetupReqLen as u8 > DevEP0SIZE) { DevEP0SIZE } else { SetupReqLen as u8 };
                         SetupReqLen -= len as u16;
@@ -829,17 +828,6 @@ fn DevEP2_IN_Deal(l: u8) {
             w.bits((r.bits() & !MASK_UEP_T_RES) | UEP_T_RES_ACK)
         });
     }
-}
-
-fn DevEP1_OUT_Deal(l: u8)
-{
-    // uint8_t i;
-
-    // for(i = 0; i < l; i++)
-    // {
-    //     pEP1_IN_DataBuf[i] = ~pEP1_OUT_DataBuf[i];
-    // }
-    // DevEP1_IN_Deal(l);
 }
 
 
