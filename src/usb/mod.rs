@@ -50,3 +50,71 @@ pub const UIS_TOKEN_IN: u8 = 0x20;
 pub const UIS_TOKEN_SETUP: u8 = 0x30;
 
 pub const MASK_UIS_ENDP: u8 = 0x0F;      // RO, bit mask of current transfer endpoint number for USB device mode
+
+
+
+
+
+
+// USB standard device request code/
+pub const USB_GET_STATUS: u8 =        0x00;
+pub const USB_CLEAR_FEATURE: u8 =     0x01;
+pub const USB_SET_FEATURE: u8 =       0x03;
+pub const USB_SET_ADDRESS: u8 =       0x05;
+pub const USB_GET_DESCRIPTOR: u8 =    0x06;
+pub const USB_SET_DESCRIPTOR: u8 =    0x07;
+pub const USB_GET_CONFIGURATION: u8 = 0x08;
+pub const USB_SET_CONFIGURATION: u8 = 0x09;
+pub const USB_GET_INTERFACE: u8 =     0x0A;
+pub const USB_SET_INTERFACE: u8 =     0x0B;
+pub const USB_SYNCH_FRAME: u8 =       0x0C;
+
+/* Bit define for USB request type */
+pub const USB_REQ_TYP_IN: u8        = 0x80;           /* control IN, device to host */
+pub const USB_REQ_TYP_OUT: u8       = 0x00;           /* control OUT, host to device */
+pub const USB_REQ_TYP_READ: u8      = 0x80;           /* control read, device to host */
+pub const USB_REQ_TYP_WRITE: u8     = 0x00;           /* control write, host to device */
+pub const USB_REQ_TYP_MASK: u8      = 0x60;           /* bit mask of request type */
+pub const USB_REQ_TYP_STANDARD: u8  = 0x00;
+pub const USB_REQ_TYP_CLASS: u8     = 0x20;
+pub const USB_REQ_TYP_VENDOR: u8    = 0x40;
+pub const USB_REQ_TYP_RESERVED: u8  = 0x60;
+pub const USB_REQ_RECIP_MASK: u8    = 0x1F;           /* bit mask of request recipient */
+pub const USB_REQ_RECIP_DEVICE: u8  = 0x00;
+pub const USB_REQ_RECIP_INTERF: u8  = 0x01;
+pub const USB_REQ_RECIP_ENDP: u8    = 0x02;
+pub const USB_REQ_RECIP_OTHER: u8   = 0x03;
+
+/* USB descriptor type */
+pub const USB_DESCR_TYP_DEVICE: u8 =    0x01;
+pub const USB_DESCR_TYP_CONFIG: u8 =    0x02;
+pub const USB_DESCR_TYP_STRING: u8 =    0x03;
+pub const USB_DESCR_TYP_INTERF: u8 =    0x04;
+pub const USB_DESCR_TYP_ENDP: u8 =      0x05;
+pub const USB_DESCR_TYP_QUALIF: u8 =    0x06;
+pub const USB_DESCR_TYP_SPEED: u8 =     0x07;
+pub const USB_DESCR_TYP_OTG: u8 =       0x09;
+pub const USB_DESCR_TYP_HID: u8 =       0x21;
+pub const USB_DESCR_TYP_REPORT: u8 =    0x22;
+pub const USB_DESCR_TYP_PHYSIC: u8 =    0x23;
+pub const USB_DESCR_TYP_CS_INTF: u8 =   0x24;
+pub const USB_DESCR_TYP_CS_ENDP: u8 =   0x25;
+pub const USB_DESCR_TYP_HUB: u8 =       0x29;
+
+/* HID Class Request */
+pub const HID_GET_REPORT: u8 =           0x01;
+pub const HID_GET_IDLE: u8 =           0x02;
+pub const HID_GET_PROTOCOL: u8 =       0x03;
+pub const HID_SET_REPORT: u8 =         0x09;
+pub const HID_SET_IDLE: u8 =           0x0A;
+pub const HID_SET_PROTOCOL: u8 =       0x0B;
+
+
+#[repr(packed, C)]
+pub struct USB_SETUP_REQ {
+    pub bRequestType: u8,
+    pub bRequest: u8,
+    pub wValue: u16,
+    pub wIndex: u16,
+    pub wLength: u16,
+}

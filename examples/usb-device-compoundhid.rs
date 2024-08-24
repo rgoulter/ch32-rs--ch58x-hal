@@ -46,6 +46,9 @@ use usb::{
     HID_GET_IDLE,
     HID_GET_PROTOCOL,
 };
+use usb::{
+    USB_SETUP_REQ,
+};
 
 use qingke_rt::highcode;
 
@@ -129,15 +132,6 @@ static mut EP0_Databuf: EPBuffer<{64 + 64 + 64}> = EPBuffer([0; 64 + 64 + 64]); 
 static mut EP1_Databuf: EPBuffer<{64 + 64}> = EPBuffer([0; 64 + 64]); //ep1_out(64)+ep1_in(64)
 static mut EP2_Databuf: EPBuffer<{64 + 64}> = EPBuffer([0; 64 + 64]); //ep2_out(64)+ep2_in(64)
 static EP3_Databuf: EPBuffer<{64 + 64}> = EPBuffer([0; 64 + 64]); //ep3_out(64)+ep3_in(64)
-
-#[repr(packed, C)]
-struct USB_SETUP_REQ {
-    bRequestType: u8,
-    bRequest: u8,
-    wValue: u16,
-    wIndex: u16,
-    wLength: u16,
-}
 
 
 
