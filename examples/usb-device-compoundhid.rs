@@ -25,6 +25,27 @@ use usb::{
     MASK_UEP_R_RES,
     MASK_UEP_T_RES,
 };
+use usb::{
+    USB_REQ_TYP_MASK,
+    USB_REQ_TYP_STANDARD,
+};
+use usb::{
+    USB_REQ_RECIP_MASK,
+    USB_REQ_RECIP_DEVICE,
+    USB_REQ_RECIP_ENDP,
+};
+use usb::{
+    USB_GET_DESCRIPTOR,
+    USB_SET_ADDRESS,
+    USB_SET_FEATURE,
+};
+use usb::{
+    HID_SET_IDLE,
+    HID_SET_REPORT,
+    HID_SET_PROTOCOL,
+    HID_GET_IDLE,
+    HID_GET_PROTOCOL,
+};
 
 use qingke_rt::highcode;
 
@@ -119,58 +140,6 @@ struct USB_SETUP_REQ {
 }
 
 
-
-// USB standard device request code/
-const USB_GET_STATUS: u8 =        0x00;
-const USB_CLEAR_FEATURE: u8 =     0x01;
-const USB_SET_FEATURE: u8 =       0x03;
-const USB_SET_ADDRESS: u8 =       0x05;
-const USB_GET_DESCRIPTOR: u8 =    0x06;
-const USB_SET_DESCRIPTOR: u8 =    0x07;
-const USB_GET_CONFIGURATION: u8 = 0x08;
-const USB_SET_CONFIGURATION: u8 = 0x09;
-const USB_GET_INTERFACE: u8 =     0x0A;
-const USB_SET_INTERFACE: u8 =     0x0B;
-const USB_SYNCH_FRAME: u8 =       0x0C;
-
-/* Bit define for USB request type */
-const USB_REQ_TYP_IN: u8        = 0x80;           /* control IN, device to host */
-const USB_REQ_TYP_OUT: u8       = 0x00;           /* control OUT, host to device */
-const USB_REQ_TYP_READ: u8      = 0x80;           /* control read, device to host */
-const USB_REQ_TYP_WRITE: u8     = 0x00;           /* control write, host to device */
-const USB_REQ_TYP_MASK: u8      = 0x60;           /* bit mask of request type */
-const USB_REQ_TYP_STANDARD: u8  = 0x00;
-const USB_REQ_TYP_CLASS: u8     = 0x20;
-const USB_REQ_TYP_VENDOR: u8    = 0x40;
-const USB_REQ_TYP_RESERVED: u8  = 0x60;
-const USB_REQ_RECIP_MASK: u8    = 0x1F;           /* bit mask of request recipient */
-const USB_REQ_RECIP_DEVICE: u8  = 0x00;
-const USB_REQ_RECIP_INTERF: u8  = 0x01;
-const USB_REQ_RECIP_ENDP: u8    = 0x02;
-const USB_REQ_RECIP_OTHER: u8   = 0x03;
-
-/* USB descriptor type */
-const USB_DESCR_TYP_DEVICE: u8 =    0x01;
-const USB_DESCR_TYP_CONFIG: u8 =    0x02;
-const USB_DESCR_TYP_STRING: u8 =    0x03;
-const USB_DESCR_TYP_INTERF: u8 =    0x04;
-const USB_DESCR_TYP_ENDP: u8 =      0x05;
-const USB_DESCR_TYP_QUALIF: u8 =    0x06;
-const USB_DESCR_TYP_SPEED: u8 =     0x07;
-const USB_DESCR_TYP_OTG: u8 =       0x09;
-const USB_DESCR_TYP_HID: u8 =       0x21;
-const USB_DESCR_TYP_REPORT: u8 =    0x22;
-const USB_DESCR_TYP_PHYSIC: u8 =    0x23;
-const USB_DESCR_TYP_CS_INTF: u8 =   0x24;
-const USB_DESCR_TYP_CS_ENDP: u8 =   0x25;
-const USB_DESCR_TYP_HUB: u8 =       0x29;
-
-/* HID Class Request */
-const DEF_USB_GET_IDLE: u8 =           0x02;                                        /* get idle for key or mouse */
-const DEF_USB_GET_PROTOCOL: u8 =       0x03;                                        /* get protocol for bios type */
-const DEF_USB_SET_REPORT: u8 =         0x09;                                        /* set report for key */
-const DEF_USB_SET_IDLE: u8 =           0x0A;                                        /* set idle for key or mouse */
-const DEF_USB_SET_PROTOCOL: u8 =       0x0B;                                        /* set protocol for bios type */
 
 macro_rules! println {
     ($($arg:tt)*) => {
@@ -457,27 +426,27 @@ fn USB_DevTransProcess() {
                         /* Manufacturer request */
                     } else if (pSetupReqPak.bRequestType & 0x20) > 0 {
                         match SetupReqCode {
-                            DEF_USB_SET_IDLE => { /* 0x0A: SET_IDLE */
+                            HID_SET_IDLE => { /* 0x0A: SET_IDLE */
                                 //The host wants to set the idle time interval for HID device-specific input reports
                                 Idle_Value[pSetupReqPak.wIndex as usize] = (pSetupReqPak.wValue>>8) as u8;
                             }
 
-                            DEF_USB_SET_REPORT => { /* 0x09: SET_REPORT */
+                            HID_SET_REPORT => { /* 0x09: SET_REPORT */
                                 //The host wants to set the report descriptor of the HID device
                             }
 
-                            DEF_USB_SET_PROTOCOL => { /* 0x0B: SET_PROTOCOL */
+                            HID_SET_PROTOCOL => { /* 0x0B: SET_PROTOCOL */
                                 //The host wants to set the protocol currently used by the HID device
                                 Report_Value[pSetupReqPak.wIndex as usize] = pSetupReqPak.wValue as u8;
                             }
 
-                            DEF_USB_GET_IDLE => { /* 0x02: GET_IDLE */
+                            HID_GET_IDLE => { /* 0x02: GET_IDLE */
                                 //The host wants to read the current idle ratio of the HID device specific input report.
                                 EP0_Databuf.0[0] = Idle_Value[pSetupReqPak.wIndex as usize];
                                 len = 1;
                             }
 
-                            DEF_USB_GET_PROTOCOL => { /* 0x03: GET_PROTOCOL */
+                            HID_GET_PROTOCOL => { /* 0x03: GET_PROTOCOL */
                                 //The host wants to obtain the protocol currently used by the HID device
                                 EP0_Databuf.0[0] = Report_Value[pSetupReqPak.wIndex as usize];
                                 len = 1;
