@@ -58,7 +58,7 @@ use usb::{
     HID_GET_IDLE,
     HID_GET_PROTOCOL,
 };
-use usb::USB_SETUP_REQ;
+use usb::SetupRequest;
 use usb::{
     USB_DESCR_TYP_DEVICE,
     USB_DESCR_TYP_CONFIG,
@@ -416,19 +416,19 @@ fn USB_DevTransProcess() {
 
                 // read raw bytes from EP0 databuf into setup req struct
 
-                let pSetupReqPak: &USB_SETUP_REQ = EP0_Databuf.0.as_ptr().cast::<USB_SETUP_REQ>().as_ref().unwrap();
+                let pSetupReqPak: &SetupRequest = EP0_Databuf.0.as_ptr().cast::<SetupRequest>().as_ref().unwrap();
                 SetupReqLen = pSetupReqPak.wLength;
                 SetupReqCode = pSetupReqPak.bRequest;
 
                 let mut len: u8 = 0;
                 let mut errflag: u8 = 0;
 
-                if (pSetupReqPak.bRequestType & USB_REQ_TYP_MASK) != USB_REQ_TYP_STANDARD {
+                if (pSetupReqPak.bm_request_type & USB_REQ_TYP_MASK) != USB_REQ_TYP_STANDARD {
                     /* Non-standard requests */
                     /* Other requests, such as class requests, vendor requests, etc. */
-                    if (pSetupReqPak.bRequestType & 0x40) > 0 {
+                    if (pSetupReqPak.bm_request_type & 0x40) > 0 {
                         /* Manufacturer request */
-                    } else if (pSetupReqPak.bRequestType & 0x20) > 0 {
+                    } else if (pSetupReqPak.bm_request_type & 0x20) > 0 {
                         match SetupReqCode {
                             HID_SET_IDLE => { /* 0x0A: SET_IDLE */
                                 //The host wants to set the idle time interval for HID device-specific input reports
@@ -571,7 +571,7 @@ fn USB_DevTransProcess() {
                         }
 
                         USB_CLEAR_FEATURE => {
-                            if (pSetupReqPak.bRequestType & USB_REQ_RECIP_MASK) == USB_REQ_RECIP_ENDP {
+                            if (pSetupReqPak.bm_request_type & USB_REQ_RECIP_MASK) == USB_REQ_RECIP_ENDP {
                                 // endpoints
                                 match (pSetupReqPak.wIndex) & 0xff {
                                     0x83 => {
@@ -608,7 +608,7 @@ fn USB_DevTransProcess() {
                                         errflag = 0xFF; // Unsupported endpoint
                                     }
                                 }
-                            } else if (pSetupReqPak.bRequestType & USB_REQ_RECIP_MASK) == USB_REQ_RECIP_DEVICE {
+                            } else if (pSetupReqPak.bm_request_type & USB_REQ_RECIP_MASK) == USB_REQ_RECIP_DEVICE {
                                 if pSetupReqPak.wValue == 1 {
                                     USB_SleepStatus &= !0x01;
                                 }
@@ -618,7 +618,7 @@ fn USB_DevTransProcess() {
                         }
 
                         USB_SET_FEATURE => {
-                            if (pSetupReqPak.bRequestType & USB_REQ_RECIP_MASK) == USB_REQ_RECIP_ENDP {
+                            if (pSetupReqPak.bm_request_type & USB_REQ_RECIP_MASK) == USB_REQ_RECIP_ENDP {
                                 /* endpoints */
                                 match pSetupReqPak.wIndex {
                                     0x83 => {
@@ -655,7 +655,7 @@ fn USB_DevTransProcess() {
                                         errflag = 0xFF; // unsupported endpoint
                                     }
                                 }
-                            } else if (pSetupReqPak.bRequestType & USB_REQ_RECIP_MASK) == USB_REQ_RECIP_DEVICE {
+                            } else if (pSetupReqPak.bm_request_type & USB_REQ_RECIP_MASK) == USB_REQ_RECIP_DEVICE {
                                 if pSetupReqPak.wValue == 1 {
                                     /* set sleep */
                                     USB_SleepStatus |= 0x01;
@@ -675,7 +675,7 @@ fn USB_DevTransProcess() {
                         USB_SET_INTERFACE => {}
 
                         USB_GET_STATUS => {
-                            if (pSetupReqPak.bRequestType & USB_REQ_RECIP_MASK) == USB_REQ_RECIP_ENDP {
+                            if (pSetupReqPak.bm_request_type & USB_REQ_RECIP_MASK) == USB_REQ_RECIP_ENDP {
                                 /* endpoints */
                                 EP0_Databuf.0[0] = 0x00;
                                 match pSetupReqPak.wIndex {
@@ -717,7 +717,7 @@ fn USB_DevTransProcess() {
 
                                     _ => {}
                                 }
-                            } else if (pSetupReqPak.bRequestType & USB_REQ_RECIP_MASK) == USB_REQ_RECIP_DEVICE {
+                            } else if (pSetupReqPak.bm_request_type & USB_REQ_RECIP_MASK) == USB_REQ_RECIP_DEVICE {
                                 EP0_Databuf.0[0] = 0x00;
                                 if USB_SleepStatus > 0 {
                                     EP0_Databuf.0[0] = 0x02;
@@ -748,7 +748,7 @@ fn USB_DevTransProcess() {
                     });
                 } else {
                     let mut len: u8 = 0;
-                    if (pSetupReqPak.bRequestType & 0x80) > 0 { // upload
+                    if (pSetupReqPak.bm_request_type & 0x80) > 0 { // upload
                         len = if (SetupReqLen as u8 > DevEP0SIZE) { DevEP0SIZE } else { SetupReqLen as u8 };
                         SetupReqLen -= len as u16;
                     } else {

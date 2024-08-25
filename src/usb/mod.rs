@@ -109,10 +109,60 @@ pub const HID_SET_PROTOCOL: u8 =       0x0B;
 
 
 #[repr(packed, C)]
-pub struct USB_SETUP_REQ {
-    pub bRequestType: u8,
+pub struct SetupRequest {
+    pub bm_request_type: u8,
     pub bRequest: u8,
     pub wValue: u16,
     pub wIndex: u16,
     pub wLength: u16,
+}
+
+pub enum SetupTransferDirection {
+    HostToDevice,
+    DeviceToHost,
+}
+
+pub enum SetupRequestType {
+    Standard,
+    Class,
+    Vendor,
+    Reserved,
+}
+
+pub enum SetupRecipient {
+    Device,
+    Interface,
+    Endpoint,
+    Other,
+    Unknown(u8),
+}
+
+impl SetupRequest {
+    pub fn request_type(&self) -> SetupRequestType {
+        match self.bm_request_type & USB_REQ_TYP_MASK {
+            USB_REQ_TYP_STANDARD => SetupRequestType::Standard,
+            USB_REQ_TYP_CLASS => SetupRequestType::Class,
+            USB_REQ_TYP_VENDOR => SetupRequestType::Vendor,
+            USB_REQ_TYP_RESERVED => SetupRequestType::Reserved,
+            _ => unreachable!(),
+        }
+    }
+
+    pub fn recipient(&self) -> SetupRecipient {
+        match self.bm_request_type & USB_REQ_RECIP_MASK {
+            USB_REQ_RECIP_DEVICE => SetupRecipient::Device,
+            USB_REQ_RECIP_INTERF => SetupRecipient::Interface,
+            USB_REQ_RECIP_ENDP => SetupRecipient::Endpoint,
+            USB_REQ_RECIP_OTHER => SetupRecipient::Other,
+            x => SetupRecipient::Unknown(x),
+        }
+    }
+
+    pub fn direction(&self) -> SetupTransferDirection {
+        match self.bm_request_type & USB_REQ_TYP_IN {
+            USB_REQ_TYP_IN => SetupTransferDirection::DeviceToHost,
+            USB_REQ_TYP_OUT => SetupTransferDirection::HostToDevice,
+            _ => unreachable!(),
+        }
+    }
 }
