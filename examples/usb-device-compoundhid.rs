@@ -58,7 +58,10 @@ use usb::{
     HID_GET_IDLE,
     HID_GET_PROTOCOL,
 };
-use usb::SetupRequest;
+use usb::{
+    SetupRequest,
+    SetupTransferDirection,
+};
 use usb::{
     USB_DESCR_TYP_DEVICE,
     USB_DESCR_TYP_CONFIG,
@@ -748,11 +751,16 @@ fn USB_DevTransProcess() {
                     });
                 } else {
                     let len: u8;
-                    if (pSetupReqPak.bm_request_type & 0x80) > 0 { // upload
-                        len = if SetupReqLen as u8 > DevEP0SIZE { DevEP0SIZE } else { SetupReqLen as u8 };
-                        SetupReqLen -= len as u16;
-                    } else {
-                        len = 0; // download
+                    match pSetupReqPak.direction() {
+                        SetupTransferDirection::DeviceToHost => {
+                            // upload
+                            len = if SetupReqLen as u8 > DevEP0SIZE { DevEP0SIZE } else { SetupReqLen as u8 };
+                            SetupReqLen -= len as u16;
+                        }
+                        SetupTransferDirection::HostToDevice => {
+                            // download
+                            len = 0;
+                        }
                     }
                     usb.uep0_t_len().write(|w| w.bits(len));
                     usb.uep0_ctrl().write_with_zero(|w| {
