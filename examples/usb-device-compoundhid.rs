@@ -747,9 +747,9 @@ fn USB_DevTransProcess() {
                         w.uep_t_tog().set_bit()
                     });
                 } else {
-                    let mut len: u8 = 0;
+                    let len: u8;
                     if (pSetupReqPak.bm_request_type & 0x80) > 0 { // upload
-                        len = if (SetupReqLen as u8 > DevEP0SIZE) { DevEP0SIZE } else { SetupReqLen as u8 };
+                        len = if SetupReqLen as u8 > DevEP0SIZE { DevEP0SIZE } else { SetupReqLen as u8 };
                         SetupReqLen -= len as u16;
                     } else {
                         len = 0; // download
