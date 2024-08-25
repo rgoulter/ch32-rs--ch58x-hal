@@ -117,11 +117,13 @@ pub struct SetupRequest {
     pub wLength: u16,
 }
 
+#[derive(Debug)]
 pub enum SetupTransferDirection {
     HostToDevice,
     DeviceToHost,
 }
 
+#[derive(Debug)]
 pub enum SetupRequestType {
     Standard,
     Class,
@@ -129,11 +131,28 @@ pub enum SetupRequestType {
     Reserved,
 }
 
+#[derive(Debug)]
 pub enum SetupRecipient {
     Device,
     Interface,
     Endpoint,
     Other,
+    Unknown(u8),
+}
+
+#[derive(Debug)]
+pub enum SetupRequestRequest {
+    GetStatus,
+    ClearFeature,
+    SetFeature,
+    SetAddress,
+    GetDescriptor,
+    SetDescriptor,
+    GetConfiguration,
+    SetConfiguration,
+    GetInterface,
+    SetInterface,
+    SynchFrame,
     Unknown(u8),
 }
 
@@ -163,6 +182,23 @@ impl SetupRequest {
             USB_REQ_TYP_IN => SetupTransferDirection::DeviceToHost,
             USB_REQ_TYP_OUT => SetupTransferDirection::HostToDevice,
             _ => unreachable!(),
+        }
+    }
+
+    pub fn request(&self) -> SetupRequestRequest {
+        match self.bRequest {
+            USB_GET_STATUS => SetupRequestRequest::GetStatus,
+            USB_CLEAR_FEATURE => SetupRequestRequest::ClearFeature,
+            USB_SET_FEATURE => SetupRequestRequest::SetFeature,
+            USB_SET_ADDRESS => SetupRequestRequest::SetAddress,
+            USB_GET_DESCRIPTOR => SetupRequestRequest::GetDescriptor,
+            USB_SET_DESCRIPTOR => SetupRequestRequest::SetDescriptor,
+            USB_GET_CONFIGURATION => SetupRequestRequest::GetConfiguration,
+            USB_SET_CONFIGURATION => SetupRequestRequest::SetConfiguration,
+            USB_GET_INTERFACE => SetupRequestRequest::GetInterface,
+            USB_SET_INTERFACE => SetupRequestRequest::SetInterface,
+            USB_SYNCH_FRAME => SetupRequestRequest::SynchFrame,
+            x => SetupRequestRequest::Unknown(x),
         }
     }
 }

@@ -423,6 +423,11 @@ fn USB_DevTransProcess() {
                 SetupReqLen = pSetupReqPak.wLength;
                 SetupReqCode = pSetupReqPak.bRequest;
 
+                println!("SetupRequest: direction: {:?}\r", pSetupReqPak.direction());
+                println!("SetupRequest: type: {:?}\r", pSetupReqPak.request_type());
+                println!("SetupRequest: recipient: {:?}\r", pSetupReqPak.recipient());
+                println!("SetupRequest: request: {:?}\r", pSetupReqPak.request());
+
                 let mut len: u8 = 0;
                 let mut errflag: u8 = 0;
 
