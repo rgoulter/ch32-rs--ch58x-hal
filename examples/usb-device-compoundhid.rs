@@ -26,8 +26,8 @@ use usb::{
     MASK_UEP_T_RES,
 };
 use usb::{
-   UIS_TOKEN_IN,
-   UIS_TOKEN_OUT,
+    UIS_TOKEN_IN,
+    UIS_TOKEN_OUT,
 };
 use usb::{
     USB_REQ_TYP_MASK,
