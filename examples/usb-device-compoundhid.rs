@@ -59,6 +59,12 @@ use usb::{
     HID_GET_PROTOCOL,
 };
 use usb::{
+    RRes,
+    TRes,
+    UEPnCtrl,
+    USB,
+};
+use usb::{
     SetupRequest,
     SetupTransferDirection,
 };
@@ -272,6 +278,10 @@ fn USB_DeviceInit() {
 fn USB_DevTransProcess() {
     unsafe {
         let usb = peripherals::USB::steal();
+        let usbh = USB::new(peripherals::USB::steal());
+
+        let uep0_ctrl = usbh.UEPn(0);
+
 
         let int_fg = usb.int_fg().read();
 
@@ -290,9 +300,7 @@ fn USB_DevTransProcess() {
                                 SetupReqLen -= len as u16;
                                 pDescr = &pDescr[len as usize..];
                                 usb.uep0_t_len().write(|w| w.bits(len as u8));
-                                usb.uep0_ctrl().modify(|r, w| {
-                                    w.uep_t_tog().bit(true ^ r.uep_t_tog().bit())
-                                });
+                                uep0_ctrl.toggle_t();
                             }
 
                             USB_SET_ADDRESS => {
@@ -300,7 +308,7 @@ fn USB_DevTransProcess() {
                                     w.bits(DevAddress);
                                     w.uda_gp_bit().bit(r.uda_gp_bit().bit() & true)
                                 });
-                                usb.uep0_ctrl().write(|w| w.bits(UEP_R_RES_ACK | UEP_T_RES_NAK));
+                                uep0_ctrl.set(false, false, RRes::Ack, TRes::Nak)
                             }
 
                             USB_SET_FEATURE => {}
@@ -311,7 +319,7 @@ fn USB_DevTransProcess() {
                                 //    packet is forced to be uploaded to end the control
                                 //    transmission.
                                 usb.uep0_t_len().write(|w| w.bits(0));
-                                usb.uep0_ctrl().write(|w| w.bits(UEP_R_RES_ACK | UEP_T_RES_NAK));
+                                uep0_ctrl.set(false, false, RRes::Ack, TRes::Nak)
                             }
                         }
                     }
@@ -412,11 +420,7 @@ fn USB_DevTransProcess() {
             }
 
             if int_st.uis_setup_act().bit_is_set() { // Setup processing
-                usb.uep0_ctrl().write_with_zero(|w| {
-                    w.uep_r_tog().set_bit();
-                    w.uep_t_tog().set_bit();
-                    w.bits(UEP_R_RES_ACK | UEP_T_RES_NAK)
-                });
+                uep0_ctrl.set(true, true, RRes::Ack, TRes::Nak);
 
                 // read raw bytes from EP0 databuf into setup req struct
 
@@ -755,11 +759,7 @@ fn USB_DevTransProcess() {
 
                 if errflag == 0xff { // error or unsupported
                     // STALL
-                    usb.uep0_ctrl().write_with_zero(|w| {
-                        w.bits(UEP_R_RES_STALL | UEP_T_RES_STALL);
-                        w.uep_r_tog().set_bit();
-                        w.uep_t_tog().set_bit()
-                    });
+                    uep0_ctrl.set(true, true, RRes::Stall, TRes::Stall);
                 } else {
                     let len: u8;
                     // TODO: ??? why is it we use the copied setup_req, and not the p_setup_req?
@@ -775,20 +775,14 @@ fn USB_DevTransProcess() {
                         }
                     }
                     usb.uep0_t_len().write(|w| w.bits(len));
-                    usb.uep0_ctrl().write_with_zero(|w| {
-                        w.bits(UEP_R_RES_ACK | UEP_T_RES_ACK);
-                        w.uep_r_tog().set_bit();
-                        w.uep_t_tog().set_bit()
-                    });
+                    uep0_ctrl.set(true, true, RRes::Ack, TRes::Ack);
                 }
 
                 usb.int_fg().write_with_zero(|w| w.uif_transfer().set_bit());
             }
         } else if int_fg.uif_bus_rst__rb_uif_detect().bit_is_set() {
             usb.dev_ad().write(|w| w.bits(0));
-            usb.uep0_ctrl().write_with_zero(|w| {
-               w.bits(UEP_R_RES_ACK | UEP_T_RES_NAK)
-            });
+            uep0_ctrl.set(false, false, RRes::Ack, TRes::Nak);
             usb.uep1_ctrl__r8_uh_setup().write_with_zero(|w| {
                 w.bits(UEP_R_RES_ACK | UEP_T_RES_NAK)
             });
