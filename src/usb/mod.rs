@@ -108,6 +108,7 @@ pub const HID_SET_IDLE: u8 =           0x0A;
 pub const HID_SET_PROTOCOL: u8 =       0x0B;
 
 
+#[derive(Clone, Copy)]
 #[repr(packed, C)]
 pub struct SetupRequest {
     pub bm_request_type: u8,

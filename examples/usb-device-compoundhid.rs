@@ -421,13 +421,18 @@ fn USB_DevTransProcess() {
                 // read raw bytes from EP0 databuf into setup req struct
 
                 let pSetupReqPak: &SetupRequest = EP0_Databuf.0.as_ptr().cast::<SetupRequest>().as_ref().unwrap();
+                let setup_request: SetupRequest = pSetupReqPak.clone();
                 SetupReqLen = pSetupReqPak.wLength;
                 SetupReqCode = pSetupReqPak.bRequest;
 
-                println!("SetupRequest: direction: {:?}\r", pSetupReqPak.direction());
-                println!("SetupRequest: type: {:?}\r", pSetupReqPak.request_type());
-                println!("SetupRequest: recipient: {:?}\r", pSetupReqPak.recipient());
-                println!("SetupRequest: request: {:?}\r", pSetupReqPak.request());
+                println!("\r");
+                println!(
+                    "SetupRequest:(direction: {:?}, type: {:?}, recipient: {:?}; req: {:?})\r",
+                    pSetupReqPak.direction(),
+                    pSetupReqPak.request_type(),
+                    pSetupReqPak.recipient(),
+                    pSetupReqPak.request(),
+                );
 
                 let mut len: u8 = 0;
                 let mut errflag: u8 = 0;
@@ -757,7 +762,8 @@ fn USB_DevTransProcess() {
                     });
                 } else {
                     let len: u8;
-                    match pSetupReqPak.direction() {
+                    // TODO: ??? why is it we use the copied setup_req, and not the p_setup_req?
+                    match setup_request.direction() {
                         SetupTransferDirection::DeviceToHost => {
                             // upload
                             len = if SetupReqLen as u8 > DevEP0SIZE { DevEP0SIZE } else { SetupReqLen as u8 };
