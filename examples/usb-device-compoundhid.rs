@@ -135,6 +135,7 @@ static mut DevConfig: u8 = 0;
 static mut Ready: u8 = 0;
 static mut SetupReqCode: u8 = 0;
 static mut SetupReqLen: u16 = 0;
+static mut DevAddress: u8 = 0;
 static mut pDescr: &[u8] = &[];
 static mut Report_Value: [u8; USB_INTERFACE_MAX_INDEX as usize + 1] = [0x00; USB_INTERFACE_MAX_INDEX as usize + 1];
 static mut Idle_Value: [u8; USB_INTERFACE_MAX_INDEX as usize + 1] = [0x00; USB_INTERFACE_MAX_INDEX as usize + 1];
@@ -296,7 +297,7 @@ fn USB_DevTransProcess() {
 
                             USB_SET_ADDRESS => {
                                 usb.dev_ad().modify(|r, w| {
-                                    w.bits(SetupReqLen as u8);
+                                    w.bits(DevAddress);
                                     w.uda_gp_bit().bit(r.uda_gp_bit().bit() & true)
                                 });
                                 usb.uep0_ctrl().write(|w| w.bits(UEP_R_RES_ACK | UEP_T_RES_NAK));
@@ -564,7 +565,7 @@ fn USB_DevTransProcess() {
                         }
 
                         USB_SET_ADDRESS => {
-                            SetupReqLen = pSetupReqPak.wValue & 0xff;
+                            DevAddress = (pSetupReqPak.wValue & 0xff) as u8;
                         }
 
                         USB_GET_CONFIGURATION => {
