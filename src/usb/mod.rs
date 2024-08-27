@@ -217,10 +217,36 @@ impl SetupRequest {
     }
 }
 
+trait UEPnCtrlReg {
+    fn bits(&self) -> u8;
+    fn modify<F>(&self, f: F)
+        where F: FnOnce(u8) -> u8;
+}
+
 pub trait UEPnCtrl {
     fn toggle_r(&self);
     fn toggle_t(&self);
+    fn set_r_res(&self, r_res: RRes);
+    fn clear_r(&self);
+    fn r_res(&self) -> RRes;
+    fn set_t_res(&self, t_res: TRes);
+    fn clear_t(&self);
+    fn t_res(&self) -> TRes;
     fn set(&self, r_tog: bool, t_tog: bool, r_res: RRes, t_res: TRes);
+
+    fn is_r_stalled(&self) -> bool {
+        match self.r_res() {
+            RRes::Stall => true,
+            _ => false,
+        }
+    }
+
+    fn is_t_stalled(&self) -> bool {
+        match self.t_res() {
+            TRes::Stall => true,
+            _ => false,
+        }
+    }
 }
 
 pub struct USB {
@@ -267,117 +293,121 @@ pub struct UEP4<'a> {
     pub ctrl: &'a crate::pac::usb::UEP4_CTRL,
 }
 
-impl<'a> UEPnCtrl for UEP0<'a> {
-    fn toggle_r(&self) {
-        self.ctrl.modify(|r, w| w.uep_r_tog().bit(r.uep_r_tog().bit() ^ true));
+impl<'a> UEPnCtrlReg for UEP0<'a> {
+    fn bits(&self) -> u8 {
+        self.ctrl.read().bits()
     }
 
-    fn toggle_t(&self) {
-        self.ctrl.modify(|r, w| w.uep_t_tog().bit(r.uep_t_tog().bit() ^ true));
-    }
-
-    fn set(&self, r_tog: bool, t_tog: bool, r_res: RRes, t_res: TRes) {
-        self.ctrl.write(|w| {
-            unsafe {
-                w.bits(
-                    (if r_tog { RB_UEP_R_TOG } else { 0x00 }) |
-                    (if t_tog { RB_UEP_T_TOG } else { 0x00 }) |
-                    (r_res as u8) |
-                    (t_res as u8)
-                )
-            }
+    fn modify<F>(&self, f: F)
+        where F: FnOnce(u8) -> u8
+    {
+        self.ctrl.modify(|r, w| unsafe {
+            w.bits(f(r.bits()))
         });
     }
 }
 
-impl<'a> UEPnCtrl for UEP1<'a> {
-    fn toggle_r(&self) {
-        self.ctrl.modify(|r, w| w.uep_r_tog__rb_uh_pre_pid_en().bit(r.uep_r_tog__rb_uh_pre_pid_en().bit() ^ true));
+impl<'a> UEPnCtrlReg for UEP1<'a> {
+    fn bits(&self) -> u8 {
+        self.ctrl.read().bits()
     }
 
-    fn toggle_t(&self) {
-        self.ctrl.modify(|r, w| w.uep_t_tog__rb_uh_sof_en().bit(r.uep_t_tog__rb_uh_sof_en().bit() ^ true));
-    }
-
-    fn set(&self, r_tog: bool, t_tog: bool, r_res: RRes, t_res: TRes) {
-        self.ctrl.write(|w| {
-            unsafe {
-                w.bits(
-                    (if r_tog { RB_UEP_R_TOG } else { 0x00 }) |
-                    (if t_tog { RB_UEP_T_TOG } else { 0x00 }) |
-                    (r_res as u8) |
-                    (t_res as u8)
-                )
-            }
+    fn modify<F>(&self, f: F)
+        where F: FnOnce(u8) -> u8
+    {
+        self.ctrl.modify(|r, w| unsafe {
+            w.bits(f(r.bits()))
         });
     }
 }
 
-impl<'a> UEPnCtrl for UEP2<'a> {
-    fn toggle_r(&self) {
-        self.ctrl.modify(|r, w| w.uep_r_tog__rb_uh_r_tog().bit(r.uep_r_tog__rb_uh_r_tog().bit() ^ true));
+impl<'a> UEPnCtrlReg for UEP2<'a> {
+    fn bits(&self) -> u8 {
+        self.ctrl.read().bits()
     }
 
-    fn toggle_t(&self) {
-        self.ctrl.modify(|r, w| w.uep_t_tog().bit(r.uep_t_tog().bit() ^ true));
-    }
-
-    fn set(&self, r_tog: bool, t_tog: bool, r_res: RRes, t_res: TRes) {
-        self.ctrl.write(|w| {
-            unsafe {
-                w.bits(
-                    (if r_tog { RB_UEP_R_TOG } else { 0x00 }) |
-                    (if t_tog { RB_UEP_T_TOG } else { 0x00 }) |
-                    (r_res as u8) |
-                    (t_res as u8)
-                )
-            }
+    fn modify<F>(&self, f: F)
+        where F: FnOnce(u8) -> u8
+    {
+        self.ctrl.modify(|r, w| unsafe {
+            w.bits(f(r.bits()))
         });
     }
 }
 
-impl<'a> UEPnCtrl for UEP3<'a> {
-    fn toggle_r(&self) {
-        self.ctrl.modify(|r, w| w.uep_r_tog().bit(r.uep_r_tog().bit() ^ true));
+impl<'a> UEPnCtrlReg for UEP3<'a> {
+    fn bits(&self) -> u8 {
+        self.ctrl.read().bits()
     }
 
-    fn toggle_t(&self) {
-        self.ctrl.modify(|r, w| w.uep_t_tog_rb_uh_t_tog().bit(r.uep_t_tog_rb_uh_t_tog().bit() ^ true));
-    }
-
-    fn set(&self, r_tog: bool, t_tog: bool, r_res: RRes, t_res: TRes) {
-        self.ctrl.write(|w| {
-            unsafe {
-                w.bits(
-                    (if r_tog { RB_UEP_R_TOG } else { 0x00 }) |
-                    (if t_tog { RB_UEP_T_TOG } else { 0x00 }) |
-                    (r_res as u8) |
-                    (t_res as u8)
-                )
-            }
+    fn modify<F>(&self, f: F)
+        where F: FnOnce(u8) -> u8
+    {
+        self.ctrl.modify(|r, w| unsafe {
+            w.bits(f(r.bits()))
         });
     }
 }
 
-impl<'a> UEPnCtrl for UEP4<'a> {
+impl<'a> UEPnCtrlReg for UEP4<'a> {
+    fn bits(&self) -> u8 {
+        self.ctrl.read().bits()
+    }
+
+    fn modify<F>(&self, f: F)
+        where F: FnOnce(u8) -> u8
+    {
+        self.ctrl.modify(|r, w| unsafe {
+            w.bits(f(r.bits()))
+        });
+    }
+}
+
+impl<RB> UEPnCtrl for RB
+where
+  RB: UEPnCtrlReg {
     fn toggle_r(&self) {
-        self.ctrl.modify(|r, w| w.uep_r_tog().bit(r.uep_r_tog().bit() ^ true));
+        self.modify(|r| r ^ RB_UEP_R_TOG);
     }
-
     fn toggle_t(&self) {
-        self.ctrl.modify(|r, w| w.uep_t_tog().bit(r.uep_t_tog().bit() ^ true));
+        self.modify(|r| r ^ RB_UEP_T_TOG);
     }
-
+    fn set_r_res(&self, r_res: RRes) {
+        self.modify(|r| (r & !MASK_UEP_R_RES) | r_res as u8);
+    }
+    fn clear_r(&self) {
+        self.modify(|r| (r & !(RB_UEP_R_TOG | MASK_UEP_R_RES)) | UEP_R_RES_ACK);
+    }
+    fn r_res(&self) -> RRes {
+        match self.bits() & MASK_UEP_R_RES {
+            UEP_R_RES_ACK => RRes::Ack,
+            UEP_R_RES_TOUT => RRes::Timeout,
+            UEP_R_RES_NAK => RRes::Nak,
+            UEP_R_RES_STALL => RRes::Stall,
+            _ => unreachable!()
+        }
+    }
+    fn set_t_res(&self, t_res: TRes) {
+        self.modify(|r| (r & !MASK_UEP_T_RES) | t_res as u8);
+    }
+    fn clear_t(&self) {
+        self.modify(|r| (r & !(RB_UEP_T_TOG | MASK_UEP_T_RES)) | UEP_T_RES_NAK);
+    }
+    fn t_res(&self) -> TRes {
+        match self.bits() & MASK_UEP_T_RES {
+            UEP_T_RES_ACK => TRes::Ack,
+            UEP_T_RES_TOUT => TRes::Timeout,
+            UEP_T_RES_NAK => TRes::Nak,
+            UEP_T_RES_STALL => TRes::Stall,
+            _ => unreachable!()
+        }
+    }
     fn set(&self, r_tog: bool, t_tog: bool, r_res: RRes, t_res: TRes) {
-        self.ctrl.write(|w| {
-            unsafe {
-                w.bits(
-                    (if r_tog { RB_UEP_R_TOG } else { 0x00 }) |
-                    (if t_tog { RB_UEP_T_TOG } else { 0x00 }) |
-                    (r_res as u8) |
-                    (t_res as u8)
-                )
-            }
+        self.modify(|_| {
+            (if r_tog { RB_UEP_R_TOG } else { 0x00 }) |
+            (if t_tog { RB_UEP_T_TOG } else { 0x00 }) |
+            (r_res as u8) |
+            (t_res as u8)
         });
     }
 }
@@ -409,6 +439,39 @@ impl<'a> UEPnCtrl for UEPn<'a> {
         }
     }
 
+    fn set_r_res(&self, r_res: RRes) {
+        match self.n {
+            0 => self.uep0_ctrl.set_r_res(r_res),
+            1 => self.uep1_ctrl.set_r_res(r_res),
+            2 => self.uep2_ctrl.set_r_res(r_res),
+            3 => self.uep3_ctrl.set_r_res(r_res),
+            4 => self.uep4_ctrl.set_r_res(r_res),
+            _ => unreachable!()
+        }
+    }
+
+    fn clear_r(&self) {
+        match self.n {
+            0 => self.uep0_ctrl.clear_r(),
+            1 => self.uep1_ctrl.clear_r(),
+            2 => self.uep2_ctrl.clear_r(),
+            3 => self.uep3_ctrl.clear_r(),
+            4 => self.uep4_ctrl.clear_r(),
+            _ => unreachable!()
+        }
+    }
+
+    fn r_res(&self) -> RRes {
+        match self.n {
+            0 => self.uep0_ctrl.r_res(),
+            1 => self.uep1_ctrl.r_res(),
+            2 => self.uep2_ctrl.r_res(),
+            3 => self.uep3_ctrl.r_res(),
+            4 => self.uep4_ctrl.r_res(),
+            _ => unreachable!()
+        }
+    }
+
     fn toggle_t(&self) {
         match self.n {
             0 => self.uep0_ctrl.toggle_t(),
@@ -416,6 +479,39 @@ impl<'a> UEPnCtrl for UEPn<'a> {
             2 => self.uep2_ctrl.toggle_t(),
             3 => self.uep3_ctrl.toggle_t(),
             4 => self.uep4_ctrl.toggle_t(),
+            _ => unreachable!()
+        }
+    }
+
+    fn set_t_res(&self, t_res: TRes) {
+        match self.n {
+            0 => self.uep0_ctrl.set_t_res(t_res),
+            1 => self.uep1_ctrl.set_t_res(t_res),
+            2 => self.uep2_ctrl.set_t_res(t_res),
+            3 => self.uep3_ctrl.set_t_res(t_res),
+            4 => self.uep4_ctrl.set_t_res(t_res),
+            _ => unreachable!()
+        }
+    }
+
+    fn clear_t(&self) {
+        match self.n {
+            0 => self.uep0_ctrl.clear_t(),
+            1 => self.uep1_ctrl.clear_t(),
+            2 => self.uep2_ctrl.clear_t(),
+            3 => self.uep3_ctrl.clear_t(),
+            4 => self.uep4_ctrl.clear_t(),
+            _ => unreachable!()
+        }
+    }
+
+    fn t_res(&self) -> TRes {
+        match self.n {
+            0 => self.uep0_ctrl.t_res(),
+            1 => self.uep1_ctrl.t_res(),
+            2 => self.uep2_ctrl.t_res(),
+            3 => self.uep3_ctrl.t_res(),
+            4 => self.uep4_ctrl.t_res(),
             _ => unreachable!()
         }
     }

@@ -280,9 +280,6 @@ fn USB_DevTransProcess() {
         let usb = peripherals::USB::steal();
         let usbh = USB::new(peripherals::USB::steal());
 
-        let uep0_ctrl = usbh.UEPn(0);
-
-
         let int_fg = usb.int_fg().read();
 
         if int_fg.uif_transfer().bit_is_set() {
@@ -300,7 +297,7 @@ fn USB_DevTransProcess() {
                                 SetupReqLen -= len as u16;
                                 pDescr = &pDescr[len as usize..];
                                 usb.uep0_t_len().write(|w| w.bits(len as u8));
-                                uep0_ctrl.toggle_t();
+                                usbh.UEPn(0).toggle_t();
                             }
 
                             USB_SET_ADDRESS => {
@@ -308,7 +305,7 @@ fn USB_DevTransProcess() {
                                     w.bits(DevAddress);
                                     w.uda_gp_bit().bit(r.uda_gp_bit().bit() & true)
                                 });
-                                uep0_ctrl.set(false, false, RRes::Ack, TRes::Nak)
+                                usbh.UEPn(0).set(false, false, RRes::Ack, TRes::Nak)
                             }
 
                             USB_SET_FEATURE => {}
@@ -319,7 +316,7 @@ fn USB_DevTransProcess() {
                                 //    packet is forced to be uploaded to end the control
                                 //    transmission.
                                 usb.uep0_t_len().write(|w| w.bits(0));
-                                uep0_ctrl.set(false, false, RRes::Ack, TRes::Nak)
+                                usbh.UEPn(0).set(false, false, RRes::Ack, TRes::Nak)
                             }
                         }
                     }
@@ -333,84 +330,16 @@ fn USB_DevTransProcess() {
                         }
                     }
 
-                    (UIS_TOKEN_OUT, 1) => {
+                    (UIS_TOKEN_OUT, i) => {
                         if int_st.uis_tog_ok().bit_is_set() {
                             // Discard out-of-sync packets
-                            usb.uep1_ctrl__r8_uh_setup().modify(|r, w| {
-                                w.uep_r_tog__rb_uh_pre_pid_en().bit(r.uep_r_tog__rb_uh_pre_pid_en().bit() ^ true)
-                            });
-                            // len = usb.rx_len().read().bits();
-                            // DevEP1_OUT_Deal(len); // TODO
+                            usbh.UEPn(i).toggle_r();
                         }
                     }
 
-                    (UIS_TOKEN_IN, 1) => {
-                        usb.uep1_ctrl__r8_uh_setup().modify(|r, w| {
-                            w.uep_t_tog__rb_uh_sof_en().bit(r.uep_t_tog__rb_uh_sof_en().bit() ^ true)
-                        });
-                        usb.uep1_ctrl__r8_uh_setup().modify(|r, w| {
-                            w.bits((r.bits() & !MASK_UEP_T_RES) | UEP_T_RES_NAK)
-                        });
-                    }
-
-                    (UIS_TOKEN_OUT, 2) => {
-                        if int_st.uis_tog_ok().bit_is_set() {
-                            // Discard out-of-sync packets
-                            usb.uep2_ctrl_r8_uh_rx_ctrl().modify(|r, w| {
-                                w.uep_r_tog__rb_uh_r_tog().bit(r.uep_r_tog__rb_uh_r_tog().bit() ^ true)
-                            });
-                            // len = usb.rx_len().read().bits();
-                            // DevEP2_OUT_Deal(len); // TODO
-                        }
-                    }
-
-                    (UIS_TOKEN_IN, 2) => {
-                        usb.uep2_ctrl_r8_uh_rx_ctrl().modify(|r, w| {
-                            w.uep_t_tog().bit(r.uep_t_tog().bit() ^ true)
-                        });
-                        usb.uep2_ctrl_r8_uh_rx_ctrl().modify(|r, w| {
-                            w.bits((r.bits() & !MASK_UEP_T_RES) | UEP_T_RES_NAK)
-                        });
-                    }
-
-                    (UIS_TOKEN_OUT, 3) => {
-                        if int_st.uis_tog_ok().bit_is_set() {
-                            // Discard out-of-sync packets
-                            usb.uep3_ctrl__r8_uh_tx_ctrl().modify(|r, w| {
-                                w.uep_r_tog().bit(r.uep_r_tog().bit() ^ true)
-                            });
-                            // len = usb.rx_len().read().bits();
-                            // DevEP3_OUT_Deal(len); // TODO
-                        }
-                    }
-
-                    (UIS_TOKEN_IN, 3) => {
-                        usb.uep3_ctrl__r8_uh_tx_ctrl().modify(|r, w| {
-                            w.uep_t_tog_rb_uh_t_tog().bit(r.uep_t_tog_rb_uh_t_tog().bit() ^ true)
-                        });
-                        usb.uep3_ctrl__r8_uh_tx_ctrl().modify(|r, w| {
-                            w.bits((r.bits() & !MASK_UEP_T_RES) | UEP_T_RES_NAK)
-                        });
-                    }
-
-                    (UIS_TOKEN_OUT, 4) => {
-                        if int_st.uis_tog_ok().bit_is_set() {
-                            // Discard out-of-sync packets
-                            usb.uep4_ctrl().modify(|r, w| {
-                                w.uep_r_tog().bit(r.uep_r_tog().bit() ^ true)
-                            });
-                            // len = usb.rx_len().read().bits();
-                            // DevEP4_OUT_Deal(len); // TODO
-                        }
-                    }
-
-                    (UIS_TOKEN_IN, 4) => {
-                        usb.uep4_ctrl().modify(|r, w| {
-                            w.uep_t_tog().bit(r.uep_t_tog().bit() ^ true)
-                        });
-                        usb.uep4_ctrl().modify(|r, w| {
-                            w.bits((r.bits() & !MASK_UEP_T_RES) | UEP_T_RES_NAK)
-                        });
+                    (UIS_TOKEN_IN, i) => {
+                        usbh.UEPn(i).toggle_t();
+                        usbh.UEPn(i).set_t_res(TRes::Nak);
                     }
 
                     _ => {}
@@ -420,7 +349,7 @@ fn USB_DevTransProcess() {
             }
 
             if int_st.uis_setup_act().bit_is_set() { // Setup processing
-                uep0_ctrl.set(true, true, RRes::Ack, TRes::Nak);
+                usbh.UEPn(0).set(true, true, RRes::Ack, TRes::Nak);
 
                 // read raw bytes from EP0 databuf into setup req struct
 
@@ -591,36 +520,26 @@ fn USB_DevTransProcess() {
                         USB_CLEAR_FEATURE => {
                             if (pSetupReqPak.bm_request_type & USB_REQ_RECIP_MASK) == USB_REQ_RECIP_ENDP {
                                 // endpoints
+                                // let endpoint_dir = pSetupReqPak.wIndex & 0xf0;
+                                // let endpoint_number = pSetupReqPak.wIndex & 0x0f;
                                 match (pSetupReqPak.wIndex) & 0xff {
                                     0x83 => {
-                                        usb.uep3_ctrl__r8_uh_tx_ctrl().modify(|r, w| {
-                                            w.bits(r.bits() & !(RB_UEP_T_TOG | MASK_UEP_T_RES) | UEP_T_RES_NAK)
-                                        });
+                                        usbh.UEPn(3).clear_t();
                                     }
                                     0x03 => {
-                                        usb.uep3_ctrl__r8_uh_tx_ctrl().modify(|r, w| {
-                                            w.bits(r.bits() & !(RB_UEP_R_TOG | MASK_UEP_R_RES) | UEP_R_RES_ACK)
-                                        });
+                                        usbh.UEPn(3).clear_r();
                                     }
                                     0x82 => {
-                                        usb.uep2_ctrl_r8_uh_rx_ctrl().modify(|r, w| {
-                                            w.bits(r.bits() & !(RB_UEP_T_TOG | MASK_UEP_T_RES) | UEP_T_RES_NAK)
-                                        });
+                                        usbh.UEPn(2).clear_t();
                                     }
                                     0x02 => {
-                                        usb.uep2_ctrl_r8_uh_rx_ctrl().modify(|r, w| {
-                                            w.bits(r.bits() & !(RB_UEP_R_TOG | MASK_UEP_R_RES) | UEP_R_RES_ACK)
-                                        });
+                                        usbh.UEPn(2).clear_r();
                                     }
                                     0x81 => {
-                                        usb.uep1_ctrl__r8_uh_setup().modify(|r, w| {
-                                            w.bits(r.bits() & !(RB_UEP_T_TOG | MASK_UEP_T_RES) | UEP_T_RES_NAK)
-                                        });
+                                        usbh.UEPn(1).clear_t();
                                     }
                                     0x01 => {
-                                        usb.uep1_ctrl__r8_uh_setup().modify(|r, w| {
-                                            w.bits(r.bits() & !(RB_UEP_R_TOG | MASK_UEP_R_RES) | UEP_R_RES_ACK)
-                                        });
+                                        usbh.UEPn(1).clear_r();
                                     }
                                     _ => {
                                         errflag = 0xFF; // Unsupported endpoint
@@ -640,34 +559,22 @@ fn USB_DevTransProcess() {
                                 /* endpoints */
                                 match pSetupReqPak.wIndex {
                                     0x83 => {
-                                        usb.uep3_ctrl__r8_uh_tx_ctrl().modify(|r, w| {
-                                            w.bits(r.bits() & !(RB_UEP_T_TOG | MASK_UEP_T_RES) | UEP_T_RES_STALL)
-                                        });
+                                        usbh.UEPn(3).set_t_res(TRes::Stall);
                                     }
                                     0x03 => {
-                                        usb.uep3_ctrl__r8_uh_tx_ctrl().modify(|r, w| {
-                                            w.bits(r.bits() & !(RB_UEP_R_TOG | MASK_UEP_R_RES) | UEP_R_RES_STALL)
-                                        });
+                                        usbh.UEPn(3).set_r_res(RRes::Stall);
                                     }
                                     0x82 => {
-                                        usb.uep2_ctrl_r8_uh_rx_ctrl().modify(|r, w| {
-                                            w.bits(r.bits() & !(RB_UEP_T_TOG | MASK_UEP_T_RES) | UEP_T_RES_STALL)
-                                        });
+                                        usbh.UEPn(2).set_t_res(TRes::Stall);
                                     }
                                     0x02 => {
-                                        usb.uep2_ctrl_r8_uh_rx_ctrl().modify(|r, w| {
-                                            w.bits(r.bits() & !(RB_UEP_R_TOG | MASK_UEP_R_RES) | UEP_R_RES_STALL)
-                                        });
+                                        usbh.UEPn(2).set_r_res(RRes::Stall);
                                     }
                                     0x81 => {
-                                        usb.uep1_ctrl__r8_uh_setup().modify(|r, w| {
-                                            w.bits(r.bits() & !(RB_UEP_T_TOG | MASK_UEP_T_RES) | UEP_T_RES_STALL)
-                                        });
+                                        usbh.UEPn(1).set_t_res(TRes::Stall);
                                     }
                                     0x01 => {
-                                        usb.uep1_ctrl__r8_uh_setup().modify(|r, w| {
-                                            w.bits(r.bits() & !(RB_UEP_R_TOG | MASK_UEP_R_RES) | UEP_R_RES_STALL)
-                                        });
+                                        usbh.UEPn(2).set_r_res(RRes::Stall);
                                     }
                                     _ => {
                                         errflag = 0xFF; // unsupported endpoint
@@ -698,37 +605,37 @@ fn USB_DevTransProcess() {
                                 EP0_Databuf.0[0] = 0x00;
                                 match pSetupReqPak.wIndex {
                                     0x83 => {
-                                        if (usb.uep3_ctrl__r8_uh_tx_ctrl().read().bits() & (RB_UEP_T_TOG | MASK_UEP_T_RES)) == UEP_T_RES_STALL {
+                                        if usbh.UEPn(3).is_t_stalled() {
                                             EP0_Databuf.0[0] = 0x01;
                                         }
                                     }
 
                                     0x03 => {
-                                        if (usb.uep3_ctrl__r8_uh_tx_ctrl().read().bits() & (RB_UEP_R_TOG | MASK_UEP_R_RES)) == UEP_R_RES_STALL {
+                                        if usbh.UEPn(3).is_r_stalled() {
                                             EP0_Databuf.0[0] = 0x01;
                                         }
                                     }
 
                                     0x82 => {
-                                        if (usb.uep2_ctrl_r8_uh_rx_ctrl().read().bits() & (RB_UEP_T_TOG | MASK_UEP_T_RES)) == UEP_T_RES_STALL {
+                                        if usbh.UEPn(2).is_t_stalled() {
                                             EP0_Databuf.0[0] = 0x01;
                                         }
                                     }
 
                                     0x02 => {
-                                        if (usb.uep2_ctrl_r8_uh_rx_ctrl().read().bits() & (RB_UEP_R_TOG | MASK_UEP_R_RES)) == UEP_R_RES_STALL {
+                                        if usbh.UEPn(2).is_r_stalled() {
                                             EP0_Databuf.0[0] = 0x01;
                                         }
                                     }
 
                                     0x81 => {
-                                        if (usb.uep1_ctrl__r8_uh_setup().read().bits() & (RB_UEP_T_TOG | MASK_UEP_T_RES)) == UEP_T_RES_STALL {
+                                        if usbh.UEPn(1).is_t_stalled() {
                                             EP0_Databuf.0[0] = 0x01;
                                         }
                                     }
 
                                     0x01 => {
-                                        if (usb.uep1_ctrl__r8_uh_setup().read().bits() & (RB_UEP_R_TOG | MASK_UEP_R_RES)) == UEP_R_RES_STALL {
+                                        if usbh.UEPn(1).is_r_stalled() {
                                             EP0_Databuf.0[0] = 0x01;
                                         }
                                     }
@@ -759,7 +666,7 @@ fn USB_DevTransProcess() {
 
                 if errflag == 0xff { // error or unsupported
                     // STALL
-                    uep0_ctrl.set(true, true, RRes::Stall, TRes::Stall);
+                    usbh.UEPn(0).set(true, true, RRes::Stall, TRes::Stall);
                 } else {
                     let len: u8;
                     // TODO: ??? why is it we use the copied setup_req, and not the p_setup_req?
@@ -775,23 +682,17 @@ fn USB_DevTransProcess() {
                         }
                     }
                     usb.uep0_t_len().write(|w| w.bits(len));
-                    uep0_ctrl.set(true, true, RRes::Ack, TRes::Ack);
+                    usbh.UEPn(0).set(true, true, RRes::Ack, TRes::Ack);
                 }
 
                 usb.int_fg().write_with_zero(|w| w.uif_transfer().set_bit());
             }
         } else if int_fg.uif_bus_rst__rb_uif_detect().bit_is_set() {
             usb.dev_ad().write(|w| w.bits(0));
-            uep0_ctrl.set(false, false, RRes::Ack, TRes::Nak);
-            usb.uep1_ctrl__r8_uh_setup().write_with_zero(|w| {
-                w.bits(UEP_R_RES_ACK | UEP_T_RES_NAK)
-            });
-            usb.uep2_ctrl_r8_uh_rx_ctrl().write_with_zero(|w| {
-                w.bits(UEP_R_RES_ACK | UEP_T_RES_NAK)
-            });
-            usb.uep3_ctrl__r8_uh_tx_ctrl().write_with_zero(|w| {
-                w.bits(UEP_R_RES_ACK | UEP_T_RES_NAK)
-            });
+            usbh.UEPn(0).set(false, false, RRes::Ack, TRes::Nak);
+            usbh.UEPn(1).set(false, false, RRes::Ack, TRes::Nak);
+            usbh.UEPn(2).set(false, false, RRes::Ack, TRes::Nak);
+            usbh.UEPn(3).set(false, false, RRes::Ack, TRes::Nak);
             usb.int_fg().write_with_zero(|w| w.uif_bus_rst__rb_uif_detect().set_bit());
         } else if int_fg.uif_suspend().bit_is_set() {
             if usb.mis_st().read().ums_suspend().bit_is_set() {
