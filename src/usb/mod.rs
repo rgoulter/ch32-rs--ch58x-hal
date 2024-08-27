@@ -271,6 +271,15 @@ impl USB {
             uep4_ctrl: UEP4 { ctrl: &self.usb.uep4_ctrl() },
         }
     }
+
+    pub fn set_address(&self, dev_address: u8) {
+        unsafe {
+            self.usb.dev_ad().modify(|r, w| {
+                w.bits(dev_address);
+                w.uda_gp_bit().bit(r.uda_gp_bit().bit())
+            });
+        }
+    }
 }
 
 pub struct UEP0<'a> {

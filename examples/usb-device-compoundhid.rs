@@ -301,10 +301,7 @@ fn USB_DevTransProcess() {
                             }
 
                             USB_SET_ADDRESS => {
-                                usb.dev_ad().modify(|r, w| {
-                                    w.bits(DevAddress);
-                                    w.uda_gp_bit().bit(r.uda_gp_bit().bit() & true)
-                                });
+                                usbh.set_address(DevAddress);
                                 usbh.UEPn(0).set(false, false, RRes::Ack, TRes::Nak)
                             }
 
