@@ -3,6 +3,7 @@
 
 use core::ptr::addr_of;
 use core::cell::RefCell;
+use ch58x_hal::usb::{HidRequest, SetupRecipient, UsbStandardRequest};
 use critical_section::Mutex;
 
 use ch58x_hal as hal;
@@ -347,15 +348,15 @@ fn USB_DevTransProcess() {
 
                 let pSetupReqPak: &SetupRequest = EP0_Databuf.0.as_ptr().cast::<SetupRequest>().as_ref().unwrap();
                 let setup_request: SetupRequest = pSetupReqPak.clone();
-                SetupReqLen = pSetupReqPak.wLength;
-                SetupReqCode = pSetupReqPak.bRequest;
+                SetupReqLen = setup_request.wLength;
+                SetupReqCode = setup_request.bRequest;
 
                 println!("\r");
                 println!(
                     "SetupRequest:(direction: {:?}, type: {:?}, recipient: {:?})\r",
-                    pSetupReqPak.direction(),
-                    pSetupReqPak.request_type(),
-                    pSetupReqPak.recipient(),
+                    setup_request.direction(),
+                    setup_request.request_type(),
+                    setup_request.recipient(),
                 );
 
                 let mut len: u8 = 0;
@@ -367,35 +368,30 @@ fn USB_DevTransProcess() {
                     SetupRequestType::Class => {
                         println!(
                             "SetupRequest: class request, req: {:?}\r",
-                            pSetupReqPak.hid_request(),
+                            setup_request.hid_request(),
                         );
-                        match SetupReqCode {
-                            HID_SET_IDLE => {
+                        match setup_request.hid_request() {
+                            HidRequest::SetIdle => {
                                 //The host wants to set the idle time interval for HID device-specific input reports
-                                Idle_Value[pSetupReqPak.wIndex as usize] = (pSetupReqPak.wValue>>8) as u8;
+                                Idle_Value[setup_request.wIndex as usize] = (setup_request.wValue>>8) as u8;
                             }
-
-                            HID_SET_REPORT => {
+                            HidRequest::SetReport => {
                                 //The host wants to set the report descriptor of the HID device
                             }
-
-                            HID_SET_PROTOCOL => {
+                            HidRequest::SetProtocol => {
                                 //The host wants to set the protocol currently used by the HID device
-                                Report_Value[pSetupReqPak.wIndex as usize] = pSetupReqPak.wValue as u8;
+                                Report_Value[setup_request.wIndex as usize] = setup_request.wValue as u8;
                             }
-
-                            HID_GET_IDLE => {
+                            HidRequest::GetIdle => {
                                 //The host wants to read the current idle ratio of the HID device specific input report.
-                                EP0_Databuf.0[0] = Idle_Value[pSetupReqPak.wIndex as usize];
+                                EP0_Databuf.0[0] = Idle_Value[setup_request.wIndex as usize];
                                 len = 1;
                             }
-
-                            HID_GET_PROTOCOL => {
+                            HidRequest::GetProtocol => {
                                 //The host wants to obtain the protocol currently used by the HID device
-                                EP0_Databuf.0[0] = Report_Value[pSetupReqPak.wIndex as usize];
+                                EP0_Databuf.0[0] = Report_Value[setup_request.wIndex as usize];
                                 len = 1;
                             }
-
                             _ => {
                                 errflag = 0xFF;
                             }
@@ -404,15 +400,20 @@ fn USB_DevTransProcess() {
                     SetupRequestType::Standard => {
                         println!(
                             "SetupRequest: standard request, req: {:?}\r",
-                            pSetupReqPak.usb_standard_request(),
+                            setup_request.usb_standard_request(),
                         );
-                        match SetupReqCode {
-                            USB_GET_DESCRIPTOR => {
+                        match setup_request.usb_standard_request() {
+                            UsbStandardRequest::GetDescriptor => {
                                 println!(
                                     "SetupRequest: descriptor type: {:?}\r",
-                                    pSetupReqPak.descriptor_type(),
+                                    setup_request.descriptor_type(),
                                 );
-                                match (pSetupReqPak.wValue >> 8) as u8 {
+                                println!(
+                                    "SetupRequest: interface: wI: {}, wV {} (??? should be wV)\r",
+                                    setup_request.wIndex & 0xff,
+                                    setup_request.wValue & 0xff,
+                                );
+                                match (setup_request.wValue >> 8) as u8 {
                                     USB_DESCR_TYP_DEVICE => {
                                         pDescr = &MyDevDescr;
                                         len = MyDevDescr[0];
@@ -424,7 +425,7 @@ fn USB_DevTransProcess() {
                                     }
 
                                     USB_DESCR_TYP_HID => {
-                                        match pSetupReqPak.wIndex & 0xff {
+                                        match setup_request.wIndex & 0xff {
                                             /* select interface */
                                             0 => {
                                                 pDescr = &MyCfgDescr[18..];
@@ -444,12 +445,12 @@ fn USB_DevTransProcess() {
                                     }
 
                                     USB_DESCR_TYP_REPORT => {
-                                        if ((pSetupReqPak.wIndex) & 0xff) == 0 {
+                                        if ((setup_request.wIndex) & 0xff) == 0 {
                                             //interface 0 report descriptor
                                             pDescr = &KeyRepDesc; //ready for upload
                                             len = KeyRepDesc.len() as u8;
                                         }
-                                        else if ((pSetupReqPak.wIndex) & 0xff) == 1 {
+                                        else if ((setup_request.wIndex) & 0xff) == 1 {
                                             //interface 1 report descriptor
                                             pDescr = &MouseRepDesc; //ready for upload
                                             len = MouseRepDesc.len() as u8;
@@ -460,7 +461,7 @@ fn USB_DevTransProcess() {
                                     }
 
                                     USB_DESCR_TYP_STRING => {
-                                        match (pSetupReqPak.wValue) & 0xff {
+                                        match (setup_request.wValue) & 0xff {
                                             1 => {
                                                 pDescr = &MyManuInfo;
                                                 len = MyManuInfo[0];
@@ -502,153 +503,159 @@ fn USB_DevTransProcess() {
                                 EP0_Databuf.0[..len as usize].copy_from_slice(&pDescr[..len as usize]);
                                 pDescr = &pDescr[len as usize..];
                             }
-
-                            USB_SET_ADDRESS => {
-                                DevAddress = (pSetupReqPak.wValue & 0xff) as u8;
+                            UsbStandardRequest::SetAddress => {
+                                DevAddress = (setup_request.wValue & 0xff) as u8;
                             }
-
-                            USB_GET_CONFIGURATION => {
+                            UsbStandardRequest::GetConfiguration => {
                                 EP0_Databuf.0[0] = DevConfig;
                                 if SetupReqLen > 1 {
                                     SetupReqLen = 1;
                                 }
                             }
-
-                            USB_SET_CONFIGURATION => {
-                                DevConfig = pSetupReqPak.wValue as u8 & 0xff;
+                            UsbStandardRequest::SetConfiguration => {
+                                DevConfig = setup_request.wValue as u8 & 0xff;
                             }
-
-                            USB_CLEAR_FEATURE => {
-                                if (pSetupReqPak.bm_request_type & USB_REQ_RECIP_MASK) == USB_REQ_RECIP_ENDP {
-                                    // endpoints
-                                    // let endpoint_dir = pSetupReqPak.wIndex & 0xf0;
-                                    // let endpoint_number = pSetupReqPak.wIndex & 0x0f;
-                                    match (pSetupReqPak.wIndex) & 0xff {
-                                        0x83 => {
-                                            usbh.UEPn(3).clear_t();
-                                        }
-                                        0x03 => {
-                                            usbh.UEPn(3).clear_r();
-                                        }
-                                        0x82 => {
-                                            usbh.UEPn(2).clear_t();
-                                        }
-                                        0x02 => {
-                                            usbh.UEPn(2).clear_r();
-                                        }
-                                        0x81 => {
-                                            usbh.UEPn(1).clear_t();
-                                        }
-                                        0x01 => {
-                                            usbh.UEPn(1).clear_r();
-                                        }
-                                        _ => {
-                                            errflag = 0xFF; // Unsupported endpoint
+                            UsbStandardRequest::ClearFeature => {
+                                match setup_request.recipient() {
+                                    SetupRecipient::Endpoint => {
+                                        // endpoints
+                                        // let endpoint_dir = setup_request.wIndex & 0xf0;
+                                        // let endpoint_number = setup_request.wIndex & 0x0f;
+                                        match (setup_request.wIndex) & 0xff {
+                                            0x83 => {
+                                                usbh.UEPn(3).clear_t();
+                                            }
+                                            0x03 => {
+                                                usbh.UEPn(3).clear_r();
+                                            }
+                                            0x82 => {
+                                                usbh.UEPn(2).clear_t();
+                                            }
+                                            0x02 => {
+                                                usbh.UEPn(2).clear_r();
+                                            }
+                                            0x81 => {
+                                                usbh.UEPn(1).clear_t();
+                                            }
+                                            0x01 => {
+                                                usbh.UEPn(1).clear_r();
+                                            }
+                                            _ => {
+                                                errflag = 0xFF; // Unsupported endpoint
+                                            }
                                         }
                                     }
-                                } else if (pSetupReqPak.bm_request_type & USB_REQ_RECIP_MASK) == USB_REQ_RECIP_DEVICE {
-                                    if pSetupReqPak.wValue == 1 {
-                                        USB_SleepStatus &= !0x01;
+                                    SetupRecipient::Device => {
+                                        if setup_request.wValue == 1 {
+                                            USB_SleepStatus &= !0x01;
+                                        }
                                     }
-                                } else {
-                                    errflag = 0xFF;
+                                    _ => {
+                                        errflag = 0xFF;
+                                    }
                                 }
                             }
-
-                            USB_SET_FEATURE => {
-                                if (pSetupReqPak.bm_request_type & USB_REQ_RECIP_MASK) == USB_REQ_RECIP_ENDP {
-                                    /* endpoints */
-                                    match pSetupReqPak.wIndex {
-                                        0x83 => {
-                                            usbh.UEPn(3).set_t_res(TRes::Stall);
-                                        }
-                                        0x03 => {
-                                            usbh.UEPn(3).set_r_res(RRes::Stall);
-                                        }
-                                        0x82 => {
-                                            usbh.UEPn(2).set_t_res(TRes::Stall);
-                                        }
-                                        0x02 => {
-                                            usbh.UEPn(2).set_r_res(RRes::Stall);
-                                        }
-                                        0x81 => {
-                                            usbh.UEPn(1).set_t_res(TRes::Stall);
-                                        }
-                                        0x01 => {
-                                            usbh.UEPn(2).set_r_res(RRes::Stall);
-                                        }
-                                        _ => {
-                                            errflag = 0xFF; // unsupported endpoint
+                            UsbStandardRequest::SetFeature => {
+                                match setup_request.recipient() {
+                                    SetupRecipient::Endpoint => {
+                                        /* endpoints */
+                                        match setup_request.wIndex {
+                                            0x83 => {
+                                                usbh.UEPn(3).set_t_res(TRes::Stall);
+                                            }
+                                            0x03 => {
+                                                usbh.UEPn(3).set_r_res(RRes::Stall);
+                                            }
+                                            0x82 => {
+                                                usbh.UEPn(2).set_t_res(TRes::Stall);
+                                            }
+                                            0x02 => {
+                                                usbh.UEPn(2).set_r_res(RRes::Stall);
+                                            }
+                                            0x81 => {
+                                                usbh.UEPn(1).set_t_res(TRes::Stall);
+                                            }
+                                            0x01 => {
+                                                usbh.UEPn(2).set_r_res(RRes::Stall);
+                                            }
+                                            _ => {
+                                                errflag = 0xFF; // unsupported endpoint
+                                            }
                                         }
                                     }
-                                } else if (pSetupReqPak.bm_request_type & USB_REQ_RECIP_MASK) == USB_REQ_RECIP_DEVICE {
-                                    if pSetupReqPak.wValue == 1 {
-                                        /* set sleep */
-                                        USB_SleepStatus |= 0x01;
+                                    SetupRecipient::Device => {
+                                        if pSetupReqPak.wValue == 1 {
+                                            /* set sleep */
+                                            USB_SleepStatus |= 0x01;
+                                        }
                                     }
-                                } else {
-                                    errflag = 0xFF;
+                                    _ => {
+                                        errflag = 0xFF;
+                                    }
                                 }
                             }
-
-                            USB_GET_INTERFACE => {
+                            UsbStandardRequest::GetInterface => {
                                 EP0_Databuf.0[0] = 0x00;
                                 if SetupReqLen > 1 {
                                     SetupReqLen = 1;
                                 }
                             }
-
-                            USB_SET_INTERFACE => {}
-
-                            USB_GET_STATUS => {
-                                if (pSetupReqPak.bm_request_type & USB_REQ_RECIP_MASK) == USB_REQ_RECIP_ENDP {
-                                    /* endpoints */
-                                    EP0_Databuf.0[0] = 0x00;
-                                    match pSetupReqPak.wIndex {
-                                        0x83 => {
-                                            if usbh.UEPn(3).is_t_stalled() {
-                                                EP0_Databuf.0[0] = 0x01;
-                                            }
-                                        }
-
-                                        0x03 => {
-                                            if usbh.UEPn(3).is_r_stalled() {
-                                                EP0_Databuf.0[0] = 0x01;
-                                            }
-                                        }
-
-                                        0x82 => {
-                                            if usbh.UEPn(2).is_t_stalled() {
-                                                EP0_Databuf.0[0] = 0x01;
-                                            }
-                                        }
-
-                                        0x02 => {
-                                            if usbh.UEPn(2).is_r_stalled() {
-                                                EP0_Databuf.0[0] = 0x01;
-                                            }
-                                        }
-
-                                        0x81 => {
-                                            if usbh.UEPn(1).is_t_stalled() {
-                                                EP0_Databuf.0[0] = 0x01;
-                                            }
-                                        }
-
-                                        0x01 => {
-                                            if usbh.UEPn(1).is_r_stalled() {
-                                                EP0_Databuf.0[0] = 0x01;
-                                            }
-                                        }
-
-                                        _ => {}
-                                    }
-                                } else if (pSetupReqPak.bm_request_type & USB_REQ_RECIP_MASK) == USB_REQ_RECIP_DEVICE {
-                                    EP0_Databuf.0[0] = 0x00;
-                                    if USB_SleepStatus > 0 {
-                                        EP0_Databuf.0[0] = 0x02;
-                                    } else {
+                            UsbStandardRequest::SetInterface => {
+                            }
+                            UsbStandardRequest::GetStatus => {
+                                match setup_request.recipient() {
+                                    SetupRecipient::Endpoint => {
+                                        /* endpoints */
                                         EP0_Databuf.0[0] = 0x00;
+                                        match setup_request.wIndex {
+                                            0x83 => {
+                                                if usbh.UEPn(3).is_t_stalled() {
+                                                    EP0_Databuf.0[0] = 0x01;
+                                                }
+                                            }
+
+                                            0x03 => {
+                                                if usbh.UEPn(3).is_r_stalled() {
+                                                    EP0_Databuf.0[0] = 0x01;
+                                                }
+                                            }
+
+                                            0x82 => {
+                                                if usbh.UEPn(2).is_t_stalled() {
+                                                    EP0_Databuf.0[0] = 0x01;
+                                                }
+                                            }
+
+                                            0x02 => {
+                                                if usbh.UEPn(2).is_r_stalled() {
+                                                    EP0_Databuf.0[0] = 0x01;
+                                                }
+                                            }
+
+                                            0x81 => {
+                                                if usbh.UEPn(1).is_t_stalled() {
+                                                    EP0_Databuf.0[0] = 0x01;
+                                                }
+                                            }
+
+                                            0x01 => {
+                                                if usbh.UEPn(1).is_r_stalled() {
+                                                    EP0_Databuf.0[0] = 0x01;
+                                                }
+                                            }
+
+                                            _ => {}
+                                        }
+                                    }
+                                    SetupRecipient::Device => {
+                                        EP0_Databuf.0[0] = 0x00;
+                                        if USB_SleepStatus > 0 {
+                                            EP0_Databuf.0[0] = 0x02;
+                                        } else {
+                                            EP0_Databuf.0[0] = 0x00;
+                                        }
+                                    }
+                                    _ => {
                                     }
                                 }
 
@@ -658,7 +665,6 @@ fn USB_DevTransProcess() {
                                     SetupReqLen = 2;
                                 }
                             }
-
                             _ => {
                                 errflag = 0xff;
                             }
