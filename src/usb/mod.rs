@@ -155,7 +155,7 @@ pub enum SetupRecipient {
 }
 
 #[derive(Debug)]
-pub enum SetupRequestRequest {
+pub enum UsbStandardRequest {
     GetStatus,
     ClearFeature,
     SetFeature,
@@ -167,6 +167,36 @@ pub enum SetupRequestRequest {
     GetInterface,
     SetInterface,
     SynchFrame,
+    Unknown(u8),
+}
+
+#[derive(Debug)]
+pub enum HidRequest {
+    GetReport,
+    GetIdle,
+    GetProtocol,
+    SetReport,
+    SetIdle,
+    SetProtocol,
+    Unknown(u8),
+}
+
+#[derive(Debug)]
+pub enum DescriptorType {
+    Device,
+    Configuration,
+    String,
+    Interface,
+    Endpoint,
+    Qualifier,
+    Speed,
+    OTG,
+    HID,
+    Report,
+    Physical,
+    CSInterface,
+    CSEndpoint,
+    Hub,
     Unknown(u8),
 }
 
@@ -199,21 +229,58 @@ impl SetupRequest {
         }
     }
 
-    pub fn request(&self) -> SetupRequestRequest {
+    pub fn usb_standard_request(&self) -> UsbStandardRequest {
         match self.bRequest {
-            USB_GET_STATUS => SetupRequestRequest::GetStatus,
-            USB_CLEAR_FEATURE => SetupRequestRequest::ClearFeature,
-            USB_SET_FEATURE => SetupRequestRequest::SetFeature,
-            USB_SET_ADDRESS => SetupRequestRequest::SetAddress,
-            USB_GET_DESCRIPTOR => SetupRequestRequest::GetDescriptor,
-            USB_SET_DESCRIPTOR => SetupRequestRequest::SetDescriptor,
-            USB_GET_CONFIGURATION => SetupRequestRequest::GetConfiguration,
-            USB_SET_CONFIGURATION => SetupRequestRequest::SetConfiguration,
-            USB_GET_INTERFACE => SetupRequestRequest::GetInterface,
-            USB_SET_INTERFACE => SetupRequestRequest::SetInterface,
-            USB_SYNCH_FRAME => SetupRequestRequest::SynchFrame,
-            x => SetupRequestRequest::Unknown(x),
+            USB_GET_STATUS => UsbStandardRequest::GetStatus,
+            USB_CLEAR_FEATURE => UsbStandardRequest::ClearFeature,
+            USB_SET_FEATURE => UsbStandardRequest::SetFeature,
+            USB_SET_ADDRESS => UsbStandardRequest::SetAddress,
+            USB_GET_DESCRIPTOR => UsbStandardRequest::GetDescriptor,
+            USB_SET_DESCRIPTOR => UsbStandardRequest::SetDescriptor,
+            USB_GET_CONFIGURATION => UsbStandardRequest::GetConfiguration,
+            USB_SET_CONFIGURATION => UsbStandardRequest::SetConfiguration,
+            USB_GET_INTERFACE => UsbStandardRequest::GetInterface,
+            USB_SET_INTERFACE => UsbStandardRequest::SetInterface,
+            USB_SYNCH_FRAME => UsbStandardRequest::SynchFrame,
+            x => UsbStandardRequest::Unknown(x),
         }
+    }
+
+    pub fn hid_request(&self) -> HidRequest {
+        match self.bRequest {
+            HID_GET_REPORT => HidRequest::GetReport,
+            HID_GET_IDLE => HidRequest::GetIdle,
+            HID_GET_PROTOCOL => HidRequest::GetProtocol,
+            HID_SET_REPORT => HidRequest::SetReport,
+            HID_SET_IDLE => HidRequest::SetIdle,
+            HID_SET_PROTOCOL => HidRequest::SetProtocol,
+            x => HidRequest::Unknown(x),
+        }
+    }
+
+    pub fn descriptor_type(&self) -> DescriptorType {
+        match (self.wValue >> 8) as u8 {
+            USB_DESCR_TYP_DEVICE => DescriptorType::Device,
+            USB_DESCR_TYP_CONFIG => DescriptorType::Configuration,
+            USB_DESCR_TYP_STRING => DescriptorType::String,
+            USB_DESCR_TYP_INTERF => DescriptorType::Interface,
+            USB_DESCR_TYP_ENDP => DescriptorType::Endpoint,
+            USB_DESCR_TYP_QUALIF => DescriptorType::Qualifier,
+            USB_DESCR_TYP_SPEED => DescriptorType::Speed,
+            USB_DESCR_TYP_OTG => DescriptorType::OTG,
+            USB_DESCR_TYP_HID => DescriptorType::HID,
+            USB_DESCR_TYP_REPORT => DescriptorType::Report,
+            USB_DESCR_TYP_PHYSIC => DescriptorType::Physical,
+            USB_DESCR_TYP_CS_INTF => DescriptorType::CSInterface,
+            USB_DESCR_TYP_CS_ENDP => DescriptorType::CSEndpoint,
+            USB_DESCR_TYP_HUB => DescriptorType::Hub,
+            x => DescriptorType::Unknown(x as u8),
+        }
+    }
+
+    pub fn descriptor_value(&self) -> (DescriptorType, u8) {
+        let descriptor_index = (self.wValue & 0xFF) as u8;
+        (self.descriptor_type(), descriptor_index)
     }
 }
 

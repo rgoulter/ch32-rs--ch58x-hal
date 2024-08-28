@@ -352,11 +352,10 @@ fn USB_DevTransProcess() {
 
                 println!("\r");
                 println!(
-                    "SetupRequest:(direction: {:?}, type: {:?}, recipient: {:?}; req: {:?})\r",
+                    "SetupRequest:(direction: {:?}, type: {:?}, recipient: {:?})\r",
                     pSetupReqPak.direction(),
                     pSetupReqPak.request_type(),
                     pSetupReqPak.recipient(),
-                    pSetupReqPak.request(),
                 );
 
                 let mut len: u8 = 0;
@@ -366,6 +365,10 @@ fn USB_DevTransProcess() {
                     SetupRequestType::Reserved => {}
                     SetupRequestType::Vendor => {}
                     SetupRequestType::Class => {
+                        println!(
+                            "SetupRequest: class request, req: {:?}\r",
+                            pSetupReqPak.hid_request(),
+                        );
                         match SetupReqCode {
                             HID_SET_IDLE => {
                                 //The host wants to set the idle time interval for HID device-specific input reports
@@ -399,8 +402,16 @@ fn USB_DevTransProcess() {
                         }
                     }
                     SetupRequestType::Standard => {
+                        println!(
+                            "SetupRequest: standard request, req: {:?}\r",
+                            pSetupReqPak.usb_standard_request(),
+                        );
                         match SetupReqCode {
                             USB_GET_DESCRIPTOR => {
+                                println!(
+                                    "SetupRequest: descriptor type: {:?}\r",
+                                    pSetupReqPak.descriptor_type(),
+                                );
                                 match (pSetupReqPak.wValue >> 8) as u8 {
                                     USB_DESCR_TYP_DEVICE => {
                                         pDescr = &MyDevDescr;
