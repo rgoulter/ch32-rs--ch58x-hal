@@ -15,14 +15,9 @@ use usb::{
     UEP_R_RES_ACK,
     UEP_T_RES_ACK,
     UEP_T_RES_NAK,
-    UEP_R_RES_STALL,
-    UEP_T_RES_STALL,
     RB_UD_PD_DIS,
-    RB_UEP_R_TOG,
-    RB_UEP_T_TOG,
     MASK_UIS_TOKEN,
     MASK_UIS_ENDP,
-    MASK_UEP_R_RES,
     MASK_UEP_T_RES,
 };
 use usb::{
@@ -49,7 +44,6 @@ use usb::{
     USB_SET_CONFIGURATION,
     USB_GET_INTERFACE,
     USB_SET_INTERFACE,
-    USB_SYNCH_FRAME,
 };
 use usb::{
     HID_SET_IDLE,
@@ -66,6 +60,7 @@ use usb::{
 };
 use usb::{
     SetupRequest,
+    SetupRequestType,
     SetupTransferDirection,
 };
 use usb::{
@@ -367,34 +362,32 @@ fn USB_DevTransProcess() {
                 let mut len: u8 = 0;
                 let mut errflag: u8 = 0;
 
-                if (pSetupReqPak.bm_request_type & USB_REQ_TYP_MASK) != USB_REQ_TYP_STANDARD {
-                    /* Non-standard requests */
-                    /* Other requests, such as class requests, vendor requests, etc. */
-                    if (pSetupReqPak.bm_request_type & 0x40) > 0 {
-                        /* Manufacturer request */
-                    } else if (pSetupReqPak.bm_request_type & 0x20) > 0 {
+                match setup_request.request_type() {
+                    SetupRequestType::Reserved => {}
+                    SetupRequestType::Vendor => {}
+                    SetupRequestType::Class => {
                         match SetupReqCode {
-                            HID_SET_IDLE => { /* 0x0A: SET_IDLE */
+                            HID_SET_IDLE => {
                                 //The host wants to set the idle time interval for HID device-specific input reports
                                 Idle_Value[pSetupReqPak.wIndex as usize] = (pSetupReqPak.wValue>>8) as u8;
                             }
 
-                            HID_SET_REPORT => { /* 0x09: SET_REPORT */
+                            HID_SET_REPORT => {
                                 //The host wants to set the report descriptor of the HID device
                             }
 
-                            HID_SET_PROTOCOL => { /* 0x0B: SET_PROTOCOL */
+                            HID_SET_PROTOCOL => {
                                 //The host wants to set the protocol currently used by the HID device
                                 Report_Value[pSetupReqPak.wIndex as usize] = pSetupReqPak.wValue as u8;
                             }
 
-                            HID_GET_IDLE => { /* 0x02: GET_IDLE */
+                            HID_GET_IDLE => {
                                 //The host wants to read the current idle ratio of the HID device specific input report.
                                 EP0_Databuf.0[0] = Idle_Value[pSetupReqPak.wIndex as usize];
                                 len = 1;
                             }
 
-                            HID_GET_PROTOCOL => { /* 0x03: GET_PROTOCOL */
+                            HID_GET_PROTOCOL => {
                                 //The host wants to obtain the protocol currently used by the HID device
                                 EP0_Databuf.0[0] = Report_Value[pSetupReqPak.wIndex as usize];
                                 len = 1;
@@ -405,258 +398,259 @@ fn USB_DevTransProcess() {
                             }
                         }
                     }
-                } else /* standard request */ {
-                    match SetupReqCode {
-                        USB_GET_DESCRIPTOR => {
-                            match (pSetupReqPak.wValue >> 8) as u8 {
-                                USB_DESCR_TYP_DEVICE => {
-                                    pDescr = &MyDevDescr;
-                                    len = MyDevDescr[0];
-                                }
-
-                                USB_DESCR_TYP_CONFIG => {
-                                    pDescr = &MyCfgDescr;
-                                    len = MyCfgDescr[2];
-                                }
-
-                                USB_DESCR_TYP_HID => {
-                                    match pSetupReqPak.wIndex & 0xff {
-                                        /* select interface */
-                                        0 => {
-                                            pDescr = &MyCfgDescr[18..];
-                                            len = 9;
-                                        }
-
-                                        1 => {
-                                            pDescr = &MyCfgDescr[43..];
-                                            len = 9;
-                                        }
-
-                                        _ => {
-                                            /* unsupported string descriptor */
-                                            errflag = 0xff;
-                                        }
+                    SetupRequestType::Standard => {
+                        match SetupReqCode {
+                            USB_GET_DESCRIPTOR => {
+                                match (pSetupReqPak.wValue >> 8) as u8 {
+                                    USB_DESCR_TYP_DEVICE => {
+                                        pDescr = &MyDevDescr;
+                                        len = MyDevDescr[0];
                                     }
-                                }
 
-                                USB_DESCR_TYP_REPORT => {
-                                    if ((pSetupReqPak.wIndex) & 0xff) == 0 {
-                                        //interface 0 report descriptor
-                                        pDescr = &KeyRepDesc; //ready for upload
-                                        len = KeyRepDesc.len() as u8;
+                                    USB_DESCR_TYP_CONFIG => {
+                                        pDescr = &MyCfgDescr;
+                                        len = MyCfgDescr[2];
                                     }
-                                    else if ((pSetupReqPak.wIndex) & 0xff) == 1 {
-                                        //interface 1 report descriptor
-                                        pDescr = &MouseRepDesc; //ready for upload
-                                        len = MouseRepDesc.len() as u8;
-                                        Ready = 1; //last interface configured
-                                    } else {
-                                        len = 0xff; //only 2 interfaces; so, this is an error
-                                    }
-                                }
 
-                                USB_DESCR_TYP_STRING => {
-                                    match (pSetupReqPak.wValue) & 0xff {
-                                        1 => {
-                                            pDescr = &MyManuInfo;
-                                            len = MyManuInfo[0];
-                                        }
-                                        2 => {
-                                            pDescr = &MyProdInfo;
-                                            len = MyProdInfo[0];
-                                        }
-                                        0 => {
-                                            pDescr = &MyLangDescr;
-                                            len = MyLangDescr[0];
-                                        }
-                                        _ => {
-                                            errflag = 0xFF; // unsupported string descriptor
+                                    USB_DESCR_TYP_HID => {
+                                        match pSetupReqPak.wIndex & 0xff {
+                                            /* select interface */
+                                            0 => {
+                                                pDescr = &MyCfgDescr[18..];
+                                                len = 9;
+                                            }
+
+                                            1 => {
+                                                pDescr = &MyCfgDescr[43..];
+                                                len = 9;
+                                            }
+
+                                            _ => {
+                                                /* unsupported string descriptor */
+                                                errflag = 0xff;
+                                            }
                                         }
                                     }
-                                }
 
-                                USB_DESCR_TYP_QUALIF => {
-                                    pDescr = &My_QueDescr;
-                                    len = My_QueDescr.len() as u8;
-                                }
-
-                                USB_DESCR_TYP_SPEED => {
-                                    USB_FS_OSC_DESC[2..(MyCfgDescr.len())].copy_from_slice(&MyCfgDescr[2..]);
-                                    pDescr = &USB_FS_OSC_DESC;
-                                    len = USB_FS_OSC_DESC.len() as u8;
-                                }
-
-                                _ => {
-                                    errflag = 0xff;
-                                }
-                            }
-
-                            if SetupReqLen > len as u16 {
-                                SetupReqLen = len as u16;
-                            }
-                            len = if SetupReqLen >= DevEP0SIZE as u16 { DevEP0SIZE } else { SetupReqLen as u8 };
-                            EP0_Databuf.0[..len as usize].copy_from_slice(&pDescr[..len as usize]);
-                            pDescr = &pDescr[len as usize..];
-                        }
-
-                        USB_SET_ADDRESS => {
-                            DevAddress = (pSetupReqPak.wValue & 0xff) as u8;
-                        }
-
-                        USB_GET_CONFIGURATION => {
-                            EP0_Databuf.0[0] = DevConfig;
-                            if SetupReqLen > 1 {
-                                SetupReqLen = 1;
-                            }
-                        }
-
-                        USB_SET_CONFIGURATION => {
-                            DevConfig = pSetupReqPak.wValue as u8 & 0xff;
-                        }
-
-                        USB_CLEAR_FEATURE => {
-                            if (pSetupReqPak.bm_request_type & USB_REQ_RECIP_MASK) == USB_REQ_RECIP_ENDP {
-                                // endpoints
-                                // let endpoint_dir = pSetupReqPak.wIndex & 0xf0;
-                                // let endpoint_number = pSetupReqPak.wIndex & 0x0f;
-                                match (pSetupReqPak.wIndex) & 0xff {
-                                    0x83 => {
-                                        usbh.UEPn(3).clear_t();
+                                    USB_DESCR_TYP_REPORT => {
+                                        if ((pSetupReqPak.wIndex) & 0xff) == 0 {
+                                            //interface 0 report descriptor
+                                            pDescr = &KeyRepDesc; //ready for upload
+                                            len = KeyRepDesc.len() as u8;
+                                        }
+                                        else if ((pSetupReqPak.wIndex) & 0xff) == 1 {
+                                            //interface 1 report descriptor
+                                            pDescr = &MouseRepDesc; //ready for upload
+                                            len = MouseRepDesc.len() as u8;
+                                            Ready = 1; //last interface configured
+                                        } else {
+                                            len = 0xff; //only 2 interfaces; so, this is an error
+                                        }
                                     }
-                                    0x03 => {
-                                        usbh.UEPn(3).clear_r();
+
+                                    USB_DESCR_TYP_STRING => {
+                                        match (pSetupReqPak.wValue) & 0xff {
+                                            1 => {
+                                                pDescr = &MyManuInfo;
+                                                len = MyManuInfo[0];
+                                            }
+                                            2 => {
+                                                pDescr = &MyProdInfo;
+                                                len = MyProdInfo[0];
+                                            }
+                                            0 => {
+                                                pDescr = &MyLangDescr;
+                                                len = MyLangDescr[0];
+                                            }
+                                            _ => {
+                                                errflag = 0xFF; // unsupported string descriptor
+                                            }
+                                        }
                                     }
-                                    0x82 => {
-                                        usbh.UEPn(2).clear_t();
+
+                                    USB_DESCR_TYP_QUALIF => {
+                                        pDescr = &My_QueDescr;
+                                        len = My_QueDescr.len() as u8;
                                     }
-                                    0x02 => {
-                                        usbh.UEPn(2).clear_r();
+
+                                    USB_DESCR_TYP_SPEED => {
+                                        USB_FS_OSC_DESC[2..(MyCfgDescr.len())].copy_from_slice(&MyCfgDescr[2..]);
+                                        pDescr = &USB_FS_OSC_DESC;
+                                        len = USB_FS_OSC_DESC.len() as u8;
                                     }
-                                    0x81 => {
-                                        usbh.UEPn(1).clear_t();
-                                    }
-                                    0x01 => {
-                                        usbh.UEPn(1).clear_r();
-                                    }
+
                                     _ => {
-                                        errflag = 0xFF; // Unsupported endpoint
+                                        errflag = 0xff;
                                     }
                                 }
-                            } else if (pSetupReqPak.bm_request_type & USB_REQ_RECIP_MASK) == USB_REQ_RECIP_DEVICE {
-                                if pSetupReqPak.wValue == 1 {
-                                    USB_SleepStatus &= !0x01;
+
+                                if SetupReqLen > len as u16 {
+                                    SetupReqLen = len as u16;
                                 }
-                            } else {
-                                errflag = 0xFF;
+                                len = if SetupReqLen >= DevEP0SIZE as u16 { DevEP0SIZE } else { SetupReqLen as u8 };
+                                EP0_Databuf.0[..len as usize].copy_from_slice(&pDescr[..len as usize]);
+                                pDescr = &pDescr[len as usize..];
                             }
-                        }
 
-                        USB_SET_FEATURE => {
-                            if (pSetupReqPak.bm_request_type & USB_REQ_RECIP_MASK) == USB_REQ_RECIP_ENDP {
-                                /* endpoints */
-                                match pSetupReqPak.wIndex {
-                                    0x83 => {
-                                        usbh.UEPn(3).set_t_res(TRes::Stall);
-                                    }
-                                    0x03 => {
-                                        usbh.UEPn(3).set_r_res(RRes::Stall);
-                                    }
-                                    0x82 => {
-                                        usbh.UEPn(2).set_t_res(TRes::Stall);
-                                    }
-                                    0x02 => {
-                                        usbh.UEPn(2).set_r_res(RRes::Stall);
-                                    }
-                                    0x81 => {
-                                        usbh.UEPn(1).set_t_res(TRes::Stall);
-                                    }
-                                    0x01 => {
-                                        usbh.UEPn(2).set_r_res(RRes::Stall);
-                                    }
-                                    _ => {
-                                        errflag = 0xFF; // unsupported endpoint
-                                    }
-                                }
-                            } else if (pSetupReqPak.bm_request_type & USB_REQ_RECIP_MASK) == USB_REQ_RECIP_DEVICE {
-                                if pSetupReqPak.wValue == 1 {
-                                    /* set sleep */
-                                    USB_SleepStatus |= 0x01;
-                                }
-                            } else {
-                                errflag = 0xFF;
+                            USB_SET_ADDRESS => {
+                                DevAddress = (pSetupReqPak.wValue & 0xff) as u8;
                             }
-                        }
 
-                        USB_GET_INTERFACE => {
-                            EP0_Databuf.0[0] = 0x00;
-                            if SetupReqLen > 1 {
-                                SetupReqLen = 1;
-                            }
-                        }
-
-                        USB_SET_INTERFACE => {}
-
-                        USB_GET_STATUS => {
-                            if (pSetupReqPak.bm_request_type & USB_REQ_RECIP_MASK) == USB_REQ_RECIP_ENDP {
-                                /* endpoints */
-                                EP0_Databuf.0[0] = 0x00;
-                                match pSetupReqPak.wIndex {
-                                    0x83 => {
-                                        if usbh.UEPn(3).is_t_stalled() {
-                                            EP0_Databuf.0[0] = 0x01;
-                                        }
-                                    }
-
-                                    0x03 => {
-                                        if usbh.UEPn(3).is_r_stalled() {
-                                            EP0_Databuf.0[0] = 0x01;
-                                        }
-                                    }
-
-                                    0x82 => {
-                                        if usbh.UEPn(2).is_t_stalled() {
-                                            EP0_Databuf.0[0] = 0x01;
-                                        }
-                                    }
-
-                                    0x02 => {
-                                        if usbh.UEPn(2).is_r_stalled() {
-                                            EP0_Databuf.0[0] = 0x01;
-                                        }
-                                    }
-
-                                    0x81 => {
-                                        if usbh.UEPn(1).is_t_stalled() {
-                                            EP0_Databuf.0[0] = 0x01;
-                                        }
-                                    }
-
-                                    0x01 => {
-                                        if usbh.UEPn(1).is_r_stalled() {
-                                            EP0_Databuf.0[0] = 0x01;
-                                        }
-                                    }
-
-                                    _ => {}
+                            USB_GET_CONFIGURATION => {
+                                EP0_Databuf.0[0] = DevConfig;
+                                if SetupReqLen > 1 {
+                                    SetupReqLen = 1;
                                 }
-                            } else if (pSetupReqPak.bm_request_type & USB_REQ_RECIP_MASK) == USB_REQ_RECIP_DEVICE {
-                                EP0_Databuf.0[0] = 0x00;
-                                if USB_SleepStatus > 0 {
-                                    EP0_Databuf.0[0] = 0x02;
+                            }
+
+                            USB_SET_CONFIGURATION => {
+                                DevConfig = pSetupReqPak.wValue as u8 & 0xff;
+                            }
+
+                            USB_CLEAR_FEATURE => {
+                                if (pSetupReqPak.bm_request_type & USB_REQ_RECIP_MASK) == USB_REQ_RECIP_ENDP {
+                                    // endpoints
+                                    // let endpoint_dir = pSetupReqPak.wIndex & 0xf0;
+                                    // let endpoint_number = pSetupReqPak.wIndex & 0x0f;
+                                    match (pSetupReqPak.wIndex) & 0xff {
+                                        0x83 => {
+                                            usbh.UEPn(3).clear_t();
+                                        }
+                                        0x03 => {
+                                            usbh.UEPn(3).clear_r();
+                                        }
+                                        0x82 => {
+                                            usbh.UEPn(2).clear_t();
+                                        }
+                                        0x02 => {
+                                            usbh.UEPn(2).clear_r();
+                                        }
+                                        0x81 => {
+                                            usbh.UEPn(1).clear_t();
+                                        }
+                                        0x01 => {
+                                            usbh.UEPn(1).clear_r();
+                                        }
+                                        _ => {
+                                            errflag = 0xFF; // Unsupported endpoint
+                                        }
+                                    }
+                                } else if (pSetupReqPak.bm_request_type & USB_REQ_RECIP_MASK) == USB_REQ_RECIP_DEVICE {
+                                    if pSetupReqPak.wValue == 1 {
+                                        USB_SleepStatus &= !0x01;
+                                    }
                                 } else {
-                                    EP0_Databuf.0[0] = 0x00;
+                                    errflag = 0xFF;
                                 }
                             }
 
-                            EP0_Databuf.0[1] = 0;
-
-                            if SetupReqLen >= 2 {
-                                SetupReqLen = 2;
+                            USB_SET_FEATURE => {
+                                if (pSetupReqPak.bm_request_type & USB_REQ_RECIP_MASK) == USB_REQ_RECIP_ENDP {
+                                    /* endpoints */
+                                    match pSetupReqPak.wIndex {
+                                        0x83 => {
+                                            usbh.UEPn(3).set_t_res(TRes::Stall);
+                                        }
+                                        0x03 => {
+                                            usbh.UEPn(3).set_r_res(RRes::Stall);
+                                        }
+                                        0x82 => {
+                                            usbh.UEPn(2).set_t_res(TRes::Stall);
+                                        }
+                                        0x02 => {
+                                            usbh.UEPn(2).set_r_res(RRes::Stall);
+                                        }
+                                        0x81 => {
+                                            usbh.UEPn(1).set_t_res(TRes::Stall);
+                                        }
+                                        0x01 => {
+                                            usbh.UEPn(2).set_r_res(RRes::Stall);
+                                        }
+                                        _ => {
+                                            errflag = 0xFF; // unsupported endpoint
+                                        }
+                                    }
+                                } else if (pSetupReqPak.bm_request_type & USB_REQ_RECIP_MASK) == USB_REQ_RECIP_DEVICE {
+                                    if pSetupReqPak.wValue == 1 {
+                                        /* set sleep */
+                                        USB_SleepStatus |= 0x01;
+                                    }
+                                } else {
+                                    errflag = 0xFF;
+                                }
                             }
-                        }
 
-                        _ => {
-                            errflag = 0xff;
+                            USB_GET_INTERFACE => {
+                                EP0_Databuf.0[0] = 0x00;
+                                if SetupReqLen > 1 {
+                                    SetupReqLen = 1;
+                                }
+                            }
+
+                            USB_SET_INTERFACE => {}
+
+                            USB_GET_STATUS => {
+                                if (pSetupReqPak.bm_request_type & USB_REQ_RECIP_MASK) == USB_REQ_RECIP_ENDP {
+                                    /* endpoints */
+                                    EP0_Databuf.0[0] = 0x00;
+                                    match pSetupReqPak.wIndex {
+                                        0x83 => {
+                                            if usbh.UEPn(3).is_t_stalled() {
+                                                EP0_Databuf.0[0] = 0x01;
+                                            }
+                                        }
+
+                                        0x03 => {
+                                            if usbh.UEPn(3).is_r_stalled() {
+                                                EP0_Databuf.0[0] = 0x01;
+                                            }
+                                        }
+
+                                        0x82 => {
+                                            if usbh.UEPn(2).is_t_stalled() {
+                                                EP0_Databuf.0[0] = 0x01;
+                                            }
+                                        }
+
+                                        0x02 => {
+                                            if usbh.UEPn(2).is_r_stalled() {
+                                                EP0_Databuf.0[0] = 0x01;
+                                            }
+                                        }
+
+                                        0x81 => {
+                                            if usbh.UEPn(1).is_t_stalled() {
+                                                EP0_Databuf.0[0] = 0x01;
+                                            }
+                                        }
+
+                                        0x01 => {
+                                            if usbh.UEPn(1).is_r_stalled() {
+                                                EP0_Databuf.0[0] = 0x01;
+                                            }
+                                        }
+
+                                        _ => {}
+                                    }
+                                } else if (pSetupReqPak.bm_request_type & USB_REQ_RECIP_MASK) == USB_REQ_RECIP_DEVICE {
+                                    EP0_Databuf.0[0] = 0x00;
+                                    if USB_SleepStatus > 0 {
+                                        EP0_Databuf.0[0] = 0x02;
+                                    } else {
+                                        EP0_Databuf.0[0] = 0x00;
+                                    }
+                                }
+
+                                EP0_Databuf.0[1] = 0;
+
+                                if SetupReqLen >= 2 {
+                                    SetupReqLen = 2;
+                                }
+                            }
+
+                            _ => {
+                                errflag = 0xff;
+                            }
                         }
                     }
                 }
@@ -666,7 +660,6 @@ fn USB_DevTransProcess() {
                     usbh.UEPn(0).set(true, true, RRes::Stall, TRes::Stall);
                 } else {
                     let len: u8;
-                    // TODO: ??? why is it we use the copied setup_req, and not the p_setup_req?
                     match setup_request.direction() {
                         SetupTransferDirection::DeviceToHost => {
                             // upload
