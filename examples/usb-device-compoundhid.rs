@@ -453,31 +453,15 @@ fn handle_standard_setup_request() -> Result<u8, u8> {
                 match setup_request.recipient() {
                     SetupRecipient::Endpoint => {
                         // endpoints
-                        // let endpoint_dir = setup_request.wIndex & 0xf0;
-                        // let endpoint_number = setup_request.wIndex & 0x0f;
-                        match (setup_request.wIndex) & 0xff {
-                            0x83 => {
-                                usbh.UEPn(3).clear_t();
+                        let direction = setup_request.wIndex & 0x80;
+                        let endpoint_number = setup_request.wIndex as u8 & 0x0f;
+                        match (direction, endpoint_number) {
+                            (0x80, i) if i > 0 => {
+                                usbh.UEPn(i).clear_t();
                                 Ok(0)
                             }
-                            0x03 => {
-                                usbh.UEPn(3).clear_r();
-                                Ok(0)
-                            }
-                            0x82 => {
-                                usbh.UEPn(2).clear_t();
-                                Ok(0)
-                            }
-                            0x02 => {
-                                usbh.UEPn(2).clear_r();
-                                Ok(0)
-                            }
-                            0x81 => {
-                                usbh.UEPn(1).clear_t();
-                                Ok(0)
-                            }
-                            0x01 => {
-                                usbh.UEPn(1).clear_r();
+                            (0x00, i) if i > 0 => {
+                                usbh.UEPn(i).clear_r();
                                 Ok(0)
                             }
                             _ => {
@@ -500,29 +484,15 @@ fn handle_standard_setup_request() -> Result<u8, u8> {
                 match setup_request.recipient() {
                     SetupRecipient::Endpoint => {
                         /* endpoints */
-                        match setup_request.wIndex {
-                            0x83 => {
-                                usbh.UEPn(3).set_t_res(TRes::Stall);
+                        let direction = setup_request.wIndex & 0x80;
+                        let endpoint_number = setup_request.wIndex as u8 & 0x0f;
+                        match (direction, endpoint_number) {
+                            (0x80, i) if i > 0 => {
+                                usbh.UEPn(i).set_t_res(TRes::Stall);
                                 Ok(0)
                             }
-                            0x03 => {
-                                usbh.UEPn(3).set_r_res(RRes::Stall);
-                                Ok(0)
-                            }
-                            0x82 => {
-                                usbh.UEPn(2).set_t_res(TRes::Stall);
-                                Ok(0)
-                            }
-                            0x02 => {
-                                usbh.UEPn(2).set_r_res(RRes::Stall);
-                                Ok(0)
-                            }
-                            0x81 => {
-                                usbh.UEPn(1).set_t_res(TRes::Stall);
-                                Ok(0)
-                            }
-                            0x01 => {
-                                usbh.UEPn(2).set_r_res(RRes::Stall);
+                            (0x00, i) if i > 0 => {
+                                usbh.UEPn(i).set_r_res(RRes::Stall);
                                 Ok(0)
                             }
                             _ => {
@@ -557,39 +527,16 @@ fn handle_standard_setup_request() -> Result<u8, u8> {
                     SetupRecipient::Endpoint => {
                         /* endpoints */
                         EP0_Databuf.0[0] = 0x00;
-                        match setup_request.wIndex {
-                            0x83 => {
-                                if usbh.UEPn(3).is_t_stalled() {
+                        let direction = setup_request.wIndex & 0x80;
+                        let endpoint_number = setup_request.wIndex as u8 & 0x0f;
+                        match (direction, endpoint_number) {
+                            (0x80, i) if i > 0 => {
+                                if usbh.UEPn(i).is_t_stalled() {
                                     EP0_Databuf.0[0] = 0x01;
                                 }
                             }
-
-                            0x03 => {
-                                if usbh.UEPn(3).is_r_stalled() {
-                                    EP0_Databuf.0[0] = 0x01;
-                                }
-                            }
-
-                            0x82 => {
-                                if usbh.UEPn(2).is_t_stalled() {
-                                    EP0_Databuf.0[0] = 0x01;
-                                }
-                            }
-
-                            0x02 => {
-                                if usbh.UEPn(2).is_r_stalled() {
-                                    EP0_Databuf.0[0] = 0x01;
-                                }
-                            }
-
-                            0x81 => {
-                                if usbh.UEPn(1).is_t_stalled() {
-                                    EP0_Databuf.0[0] = 0x01;
-                                }
-                            }
-
-                            0x01 => {
-                                if usbh.UEPn(1).is_r_stalled() {
+                            (0x00, i) if i > 0 => {
+                                if usbh.UEPn(i).is_r_stalled() {
                                     EP0_Databuf.0[0] = 0x01;
                                 }
                             }
