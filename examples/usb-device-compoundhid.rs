@@ -144,7 +144,6 @@ static mut setup_request: SetupRequest = SetupRequest {
     wLength: 0,
 };
 static mut SetupReqCode: u8 = 0;
-static mut SetupReqLen: u16 = 0;
 static mut DevAddress: u8 = 0;
 static mut pDescr: &[u8] = &[];
 static mut Report_Value: [u8; USB_INTERFACE_MAX_INDEX as usize + 1] = [0x00; USB_INTERFACE_MAX_INDEX as usize + 1];
@@ -279,7 +278,7 @@ fn USB_DeviceInit() {
     }
 }
 
-fn handle_class_setup_request() -> Result<u8, u8> {
+fn handle_class_setup_request() -> Result<usize, u8> {
     unsafe {
         let usb = peripherals::USB::steal();
         let usbh = USB::new(peripherals::USB::steal());
@@ -319,7 +318,7 @@ fn handle_class_setup_request() -> Result<u8, u8> {
     }
 }
 
-fn handle_standard_setup_request() -> Result<u8, u8> {
+fn handle_standard_setup_request() -> Result<usize, u8> {
     unsafe {
         let usb = peripherals::USB::steal();
         let usbh = USB::new(peripherals::USB::steal());
@@ -336,29 +335,24 @@ fn handle_standard_setup_request() -> Result<u8, u8> {
                     "SetupRequest: descriptor type: {:?}\r",
                     setup_request.descriptor_type(),
                 );
-                let mut len: u8 = 0;
                 match setup_request.descriptor_type() {
                     DescriptorType::Device => {
                         pDescr = &MyDevDescr;
-                        len = MyDevDescr[0];
                     }
 
                     DescriptorType::Configuration => {
                         pDescr = &MyCfgDescr;
-                        len = MyCfgDescr[2];
                     }
 
                     DescriptorType::HID => {
                         match setup_request.wIndex & 0xff {
                             /* select interface */
                             0 => {
-                                pDescr = &MyCfgDescr[18..];
-                                len = 9;
+                                pDescr = &MyCfgDescr[18..27];
                             }
 
                             1 => {
-                                pDescr = &MyCfgDescr[43..];
-                                len = 9;
+                                pDescr = &MyCfgDescr[43..52];
                             }
 
                             _ => {
@@ -372,15 +366,13 @@ fn handle_standard_setup_request() -> Result<u8, u8> {
                         if ((setup_request.wIndex) & 0xff) == 0 {
                             //interface 0 report descriptor
                             pDescr = &KeyRepDesc; //ready for upload
-                            len = KeyRepDesc.len() as u8;
                         }
                         else if ((setup_request.wIndex) & 0xff) == 1 {
                             //interface 1 report descriptor
                             pDescr = &MouseRepDesc; //ready for upload
-                            len = MouseRepDesc.len() as u8;
                             Ready = 1; //last interface configured
                         } else {
-                            len = 0xff; //only 2 interfaces; so, this is an error
+                            errflag = 0xff; //only 2 interfaces; so, this is an error
                         }
                     }
 
@@ -388,15 +380,12 @@ fn handle_standard_setup_request() -> Result<u8, u8> {
                         match (setup_request.wValue) & 0xff {
                             1 => {
                                 pDescr = &MyManuInfo;
-                                len = MyManuInfo[0];
                             }
                             2 => {
                                 pDescr = &MyProdInfo;
-                                len = MyProdInfo[0];
                             }
                             0 => {
                                 pDescr = &MyLangDescr;
-                                len = MyLangDescr[0];
                             }
                             _ => {
                                 errflag = 0xFF; // unsupported string descriptor
@@ -406,13 +395,11 @@ fn handle_standard_setup_request() -> Result<u8, u8> {
 
                     DescriptorType::Qualifier => {
                         pDescr = &My_QueDescr;
-                        len = My_QueDescr.len() as u8;
                     }
 
                     DescriptorType::Speed => {
                         USB_FS_OSC_DESC[2..(MyCfgDescr.len())].copy_from_slice(&MyCfgDescr[2..]);
                         pDescr = &USB_FS_OSC_DESC;
-                        len = USB_FS_OSC_DESC.len() as u8;
                     }
 
                     _ => {
@@ -420,11 +407,14 @@ fn handle_standard_setup_request() -> Result<u8, u8> {
                     }
                 }
 
-                if SetupReqLen > len as u16 {
-                    SetupReqLen = len as u16;
-                }
-                // XXX need to factor out SetupReqLen
-                len = if SetupReqLen >= DevEP0SIZE as u16 { DevEP0SIZE } else { SetupReqLen as u8 };
+                let offered_len = pDescr.len();
+                let requested_len = setup_request.wLength as usize;
+                let mut len = if requested_len < offered_len {
+                    requested_len
+                } else {
+                    offered_len
+                };
+                len = if len >= DevEP0SIZE as usize { DevEP0SIZE as usize } else { len };
                 EP0_Databuf.0[..len as usize].copy_from_slice(&pDescr[..len as usize]);
                 pDescr = &pDescr[len as usize..];
 
@@ -440,9 +430,6 @@ fn handle_standard_setup_request() -> Result<u8, u8> {
             }
             UsbStandardRequest::GetConfiguration => {
                 EP0_Databuf.0[0] = DevConfig;
-                if SetupReqLen > 1 {
-                    SetupReqLen = 1;
-                }
                 Ok(1)
             }
             UsbStandardRequest::SetConfiguration => {
@@ -514,9 +501,6 @@ fn handle_standard_setup_request() -> Result<u8, u8> {
             }
             UsbStandardRequest::GetInterface => {
                 EP0_Databuf.0[0] = 0x00;
-                if SetupReqLen > 1 {
-                    SetupReqLen = 1;
-                }
                 Ok(1)
             }
             UsbStandardRequest::SetInterface => {
@@ -558,9 +542,6 @@ fn handle_standard_setup_request() -> Result<u8, u8> {
 
                 EP0_Databuf.0[1] = 0;
 
-                if SetupReqLen >= 2 {
-                    SetupReqLen = 2;
-                }
                 Ok(2)
             }
             _ => {
@@ -599,20 +580,8 @@ fn handle_setup_request() {
                 // STALL
                 usbh.UEPn(0).set(true, true, RRes::Stall, TRes::Stall);
             }
-            Ok(_) => {
-                let len: u8;
-                match setup_request.direction() {
-                    SetupTransferDirection::DeviceToHost => {
-                        // upload
-                        len = if SetupReqLen as u8 > DevEP0SIZE { DevEP0SIZE } else { SetupReqLen as u8 };
-                        SetupReqLen -= len as u16;
-                    }
-                    SetupTransferDirection::HostToDevice => {
-                        // download
-                        len = 0;
-                    }
-                }
-                usb.uep0_t_len().write(|w| w.bits(len));
+            Ok(len) => {
+                usb.uep0_t_len().write(|w| w.bits(len as u8));
                 usbh.UEPn(0).set(true, true, RRes::Ack, TRes::Ack);
             }
         }
@@ -636,9 +605,8 @@ fn USB_DevTransProcess() {
                     (UIS_TOKEN_IN, 0) => {
                         match SetupReqCode as u8 {
                             USB_GET_DESCRIPTOR => {
-                                let len: u8 = if (SetupReqLen as u8) >= DevEP0SIZE { DevEP0SIZE } else { SetupReqLen as u8 };
+                                let len: u8 = if pDescr.len() as u8 >= DevEP0SIZE { DevEP0SIZE } else { pDescr.len() as u8 };
                                 EP0_Databuf.0[..len as usize].copy_from_slice(&pDescr[..len as usize]);
-                                SetupReqLen -= len as u16;
                                 pDescr = &pDescr[len as usize..];
                                 usb.uep0_t_len().write(|w| w.bits(len as u8));
                                 usbh.UEPn(0).toggle_t();
@@ -696,7 +664,6 @@ fn USB_DevTransProcess() {
 
                 let pSetupReqPak: &SetupRequest = EP0_Databuf.0.as_ptr().cast::<SetupRequest>().as_ref().unwrap();
                 setup_request = pSetupReqPak.clone();
-                SetupReqLen = setup_request.wLength;
                 SetupReqCode = setup_request.bRequest;
 
                 handle_setup_request();
