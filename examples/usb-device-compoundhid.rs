@@ -164,6 +164,7 @@ static mut EP2_Databuf: EPBuffer<{64 + 64}> = EPBuffer([0; 64 + 64]); //ep2_out(
 static EP3_Databuf: EPBuffer<{64 + 64}> = EPBuffer([0; 64 + 64]); //ep3_out(64)+ep3_in(64)
 
 
+static mut REQUEST_BUF: EPBuffer<128> = EPBuffer([0; 128]);
 
 macro_rules! println {
     ($($arg:tt)*) => {
@@ -278,10 +279,8 @@ fn USB_DeviceInit() {
     }
 }
 
-fn handle_class_setup_request() -> Result<usize, u8> {
+fn handle_class_setup_request<'a>() -> Result<&'a [u8], u8> {
     unsafe {
-        let usb = peripherals::USB::steal();
-        let usbh = USB::new(peripherals::USB::steal());
         println!(
             "SetupRequest: class request, req: {:?}\r",
             setup_request.hid_request(),
@@ -290,26 +289,26 @@ fn handle_class_setup_request() -> Result<usize, u8> {
             HidRequest::SetIdle => {
                 //The host wants to set the idle time interval for HID device-specific input reports
                 Idle_Value[setup_request.wIndex as usize] = (setup_request.wValue>>8) as u8;
-                Ok(0)
+                Ok(&[])
             }
             HidRequest::SetReport => {
                 //The host wants to set the report descriptor of the HID device
-                Ok(0)
+                Ok(&[])
             }
             HidRequest::SetProtocol => {
                 //The host wants to set the protocol currently used by the HID device
                 Report_Value[setup_request.wIndex as usize] = setup_request.wValue as u8;
-                Ok(0)
+                Ok(&[])
             }
             HidRequest::GetIdle => {
                 //The host wants to read the current idle ratio of the HID device specific input report.
-                EP0_Databuf.0[0] = Idle_Value[setup_request.wIndex as usize];
-                Ok(1)
+                REQUEST_BUF.0[0] = Idle_Value[setup_request.wIndex as usize];
+                Ok(&REQUEST_BUF.0[..1])
             }
             HidRequest::GetProtocol => {
                 //The host wants to obtain the protocol currently used by the HID device
-                EP0_Databuf.0[0] = Report_Value[setup_request.wIndex as usize];
-                Ok(1)
+                REQUEST_BUF.0[0] = Report_Value[setup_request.wIndex as usize];
+                Ok(&REQUEST_BUF.0[..1])
             }
             _ => {
                 Err(0xff)
@@ -318,7 +317,7 @@ fn handle_class_setup_request() -> Result<usize, u8> {
     }
 }
 
-fn handle_standard_setup_request() -> Result<usize, u8> {
+fn handle_standard_setup_request<'a>() -> Result<&'a [u8], u8> {
     unsafe {
         let usb = peripherals::USB::steal();
         let usbh = USB::new(peripherals::USB::steal());
@@ -331,28 +330,29 @@ fn handle_standard_setup_request() -> Result<usize, u8> {
         );
         match setup_request.usb_standard_request() {
             UsbStandardRequest::GetDescriptor => {
+                let mut descriptor_slice: &[u8] = &[];
                 println!(
                     "SetupRequest: descriptor type: {:?}\r",
                     setup_request.descriptor_type(),
                 );
                 match setup_request.descriptor_type() {
                     DescriptorType::Device => {
-                        pDescr = &MyDevDescr;
+                        descriptor_slice = &MyDevDescr;
                     }
 
                     DescriptorType::Configuration => {
-                        pDescr = &MyCfgDescr;
+                        descriptor_slice = &MyCfgDescr;
                     }
 
                     DescriptorType::HID => {
                         match setup_request.wIndex & 0xff {
                             /* select interface */
                             0 => {
-                                pDescr = &MyCfgDescr[18..27];
+                                descriptor_slice = &MyCfgDescr[18..27];
                             }
 
                             1 => {
-                                pDescr = &MyCfgDescr[43..52];
+                                descriptor_slice = &MyCfgDescr[43..52];
                             }
 
                             _ => {
@@ -365,11 +365,11 @@ fn handle_standard_setup_request() -> Result<usize, u8> {
                     DescriptorType::Report => {
                         if ((setup_request.wIndex) & 0xff) == 0 {
                             //interface 0 report descriptor
-                            pDescr = &KeyRepDesc; //ready for upload
+                            descriptor_slice = &KeyRepDesc; //ready for upload
                         }
                         else if ((setup_request.wIndex) & 0xff) == 1 {
                             //interface 1 report descriptor
-                            pDescr = &MouseRepDesc; //ready for upload
+                            descriptor_slice = &MouseRepDesc; //ready for upload
                             Ready = 1; //last interface configured
                         } else {
                             errflag = 0xff; //only 2 interfaces; so, this is an error
@@ -379,13 +379,13 @@ fn handle_standard_setup_request() -> Result<usize, u8> {
                     DescriptorType::String => {
                         match (setup_request.wValue) & 0xff {
                             1 => {
-                                pDescr = &MyManuInfo;
+                                descriptor_slice = &MyManuInfo;
                             }
                             2 => {
-                                pDescr = &MyProdInfo;
+                                descriptor_slice = &MyProdInfo;
                             }
                             0 => {
-                                pDescr = &MyLangDescr;
+                                descriptor_slice = &MyLangDescr;
                             }
                             _ => {
                                 errflag = 0xFF; // unsupported string descriptor
@@ -394,12 +394,12 @@ fn handle_standard_setup_request() -> Result<usize, u8> {
                     }
 
                     DescriptorType::Qualifier => {
-                        pDescr = &My_QueDescr;
+                        descriptor_slice = &My_QueDescr;
                     }
 
                     DescriptorType::Speed => {
                         USB_FS_OSC_DESC[2..(MyCfgDescr.len())].copy_from_slice(&MyCfgDescr[2..]);
-                        pDescr = &USB_FS_OSC_DESC;
+                        descriptor_slice = &USB_FS_OSC_DESC;
                     }
 
                     _ => {
@@ -407,34 +407,30 @@ fn handle_standard_setup_request() -> Result<usize, u8> {
                     }
                 }
 
-                let offered_len = pDescr.len();
-                let requested_len = setup_request.wLength as usize;
-                let mut len = if requested_len < offered_len {
-                    requested_len
-                } else {
-                    offered_len
-                };
-                len = if len >= DevEP0SIZE as usize { DevEP0SIZE as usize } else { len };
-                EP0_Databuf.0[..len as usize].copy_from_slice(&pDescr[..len as usize]);
-                pDescr = &pDescr[len as usize..];
-
                 if errflag > 0 {
                     Err(errflag)
                 } else {
-                    Ok(len)
+                    let offered_len = descriptor_slice.len();
+                    let requested_len = setup_request.wLength as usize;
+                    let len = if requested_len < offered_len {
+                        requested_len
+                    } else {
+                        offered_len
+                    };
+                    Ok(&descriptor_slice[..len])
                 }
             }
             UsbStandardRequest::SetAddress => {
                 DevAddress = (setup_request.wValue & 0xff) as u8;
-                Ok(0)
+                Ok(&[])
             }
             UsbStandardRequest::GetConfiguration => {
-                EP0_Databuf.0[0] = DevConfig;
-                Ok(1)
+                REQUEST_BUF.0[0] = DevConfig;
+                Ok(&REQUEST_BUF.0[..1])
             }
             UsbStandardRequest::SetConfiguration => {
                 DevConfig = setup_request.wValue as u8 & 0xff;
-                Ok(0)
+                Ok(&[])
             }
             UsbStandardRequest::ClearFeature => {
                 match setup_request.recipient() {
@@ -445,11 +441,11 @@ fn handle_standard_setup_request() -> Result<usize, u8> {
                         match (direction, endpoint_number) {
                             (0x80, i) if i > 0 => {
                                 usbh.UEPn(i).clear_t();
-                                Ok(0)
+                                Ok(&[])
                             }
                             (0x00, i) if i > 0 => {
                                 usbh.UEPn(i).clear_r();
-                                Ok(0)
+                                Ok(&[])
                             }
                             _ => {
                                 Err(0xff) // Unsupported endpoint
@@ -460,7 +456,7 @@ fn handle_standard_setup_request() -> Result<usize, u8> {
                         if setup_request.wValue == 1 {
                             USB_SleepStatus &= !0x01;
                         }
-                        Ok(0)
+                        Ok(&[])
                     }
                     _ => {
                         Err(0xff)
@@ -476,11 +472,11 @@ fn handle_standard_setup_request() -> Result<usize, u8> {
                         match (direction, endpoint_number) {
                             (0x80, i) if i > 0 => {
                                 usbh.UEPn(i).set_t_res(TRes::Stall);
-                                Ok(0)
+                                Ok(&[])
                             }
                             (0x00, i) if i > 0 => {
                                 usbh.UEPn(i).set_r_res(RRes::Stall);
-                                Ok(0)
+                                Ok(&[])
                             }
                             _ => {
                                 Err(0xff) // unsupported endpoint
@@ -492,7 +488,7 @@ fn handle_standard_setup_request() -> Result<usize, u8> {
                             /* set sleep */
                             USB_SleepStatus |= 0x01;
                         }
-                        Ok(0)
+                        Ok(&[])
                     }
                     _ => {
                         Err(0xff)
@@ -500,28 +496,28 @@ fn handle_standard_setup_request() -> Result<usize, u8> {
                 }
             }
             UsbStandardRequest::GetInterface => {
-                EP0_Databuf.0[0] = 0x00;
-                Ok(1)
+                REQUEST_BUF.0[0] = 0x00;
+                Ok(&REQUEST_BUF.0[..1])
             }
             UsbStandardRequest::SetInterface => {
-                Ok(0)
+                Ok(&[])
             }
             UsbStandardRequest::GetStatus => {
                 match setup_request.recipient() {
                     SetupRecipient::Endpoint => {
                         /* endpoints */
-                        EP0_Databuf.0[0] = 0x00;
+                        REQUEST_BUF.0[0] = 0x00;
                         let direction = setup_request.wIndex & 0x80;
                         let endpoint_number = setup_request.wIndex as u8 & 0x0f;
                         match (direction, endpoint_number) {
                             (0x80, i) if i > 0 => {
                                 if usbh.UEPn(i).is_t_stalled() {
-                                    EP0_Databuf.0[0] = 0x01;
+                                    REQUEST_BUF.0[0] = 0x01;
                                 }
                             }
                             (0x00, i) if i > 0 => {
                                 if usbh.UEPn(i).is_r_stalled() {
-                                    EP0_Databuf.0[0] = 0x01;
+                                    REQUEST_BUF.0[0] = 0x01;
                                 }
                             }
 
@@ -529,20 +525,20 @@ fn handle_standard_setup_request() -> Result<usize, u8> {
                         }
                     }
                     SetupRecipient::Device => {
-                        EP0_Databuf.0[0] = 0x00;
+                        REQUEST_BUF.0[0] = 0x00;
                         if USB_SleepStatus > 0 {
-                            EP0_Databuf.0[0] = 0x02;
+                            REQUEST_BUF.0[0] = 0x02;
                         } else {
-                            EP0_Databuf.0[0] = 0x00;
+                            REQUEST_BUF.0[0] = 0x00;
                         }
                     }
                     _ => {
                     }
                 }
 
-                EP0_Databuf.0[1] = 0;
+                REQUEST_BUF.0[1] = 0;
 
-                Ok(2)
+                Ok(&REQUEST_BUF.0[..2])
             }
             _ => {
                 Err(0xff)
@@ -564,9 +560,9 @@ fn handle_setup_request() {
             setup_request.recipient(),
         );
 
-        let setup_offer = match setup_request.request_type() {
-            SetupRequestType::Reserved => { Ok(0) }
-            SetupRequestType::Vendor => { Ok(0) }
+        let setup_offer: Result<&[u8], u8> = match setup_request.request_type() {
+            SetupRequestType::Reserved => { Ok(&[]) }
+            SetupRequestType::Vendor => { Ok(&[]) }
             SetupRequestType::Class => {
                 handle_class_setup_request()
             }
@@ -580,7 +576,12 @@ fn handle_setup_request() {
                 // STALL
                 usbh.UEPn(0).set(true, true, RRes::Stall, TRes::Stall);
             }
-            Ok(len) => {
+            Ok(slice) => {
+                pDescr = slice;
+                let len = if pDescr.len() >= DevEP0SIZE as usize { DevEP0SIZE as usize } else { pDescr.len() };
+                EP0_Databuf.0[..len as usize].copy_from_slice(&pDescr[..len as usize]);
+                pDescr = &pDescr[len as usize..];
+
                 usb.uep0_t_len().write(|w| w.bits(len as u8));
                 usbh.UEPn(0).set(true, true, RRes::Ack, TRes::Ack);
             }
