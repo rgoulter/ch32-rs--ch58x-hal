@@ -279,6 +279,28 @@ fn USB_DeviceInit() {
     }
 }
 
+// TODO: 'static lifetime is poor UX.
+fn endpoint_write(buf: &'static [u8]) {
+    // hardcoded: EP0_Databuf.0, pDescr
+    unsafe {
+        let usb = peripherals::USB::steal();
+        let usbh = USB::new(peripherals::USB::steal());
+
+        if buf.len() > 0 {
+            pDescr = buf;
+            let len = if pDescr.len() >= DevEP0SIZE as usize { DevEP0SIZE as usize } else { pDescr.len() };
+            EP0_Databuf.0[..len as usize].copy_from_slice(&pDescr[..len as usize]);
+            pDescr = &pDescr[len as usize..];
+
+            usb.uep0_t_len().write(|w| w.bits(len as u8));
+            usbh.UEPn(0).set_t_res(TRes::Ack);
+        } else {
+            usb.uep0_t_len().write(|w| w.bits(0));
+            usbh.UEPn(0).set_t_res(TRes::Ack);
+        }
+    }
+}
+
 fn handle_class_setup_request<'a>() -> Result<&'a [u8], u8> {
     unsafe {
         println!(
@@ -577,13 +599,8 @@ fn handle_setup_request() {
                 usbh.UEPn(0).set(true, true, RRes::Stall, TRes::Stall);
             }
             Ok(slice) => {
-                pDescr = slice;
-                let len = if pDescr.len() >= DevEP0SIZE as usize { DevEP0SIZE as usize } else { pDescr.len() };
-                EP0_Databuf.0[..len as usize].copy_from_slice(&pDescr[..len as usize]);
-                pDescr = &pDescr[len as usize..];
-
-                usb.uep0_t_len().write(|w| w.bits(len as u8));
-                usbh.UEPn(0).set(true, true, RRes::Ack, TRes::Ack);
+                endpoint_write(slice);
+                usbh.UEPn(0).set_r_res(RRes::Ack);
             }
         }
     }
@@ -606,11 +623,7 @@ fn USB_DevTransProcess() {
                     (UIS_TOKEN_IN, 0) => {
                         match SetupReqCode as u8 {
                             USB_GET_DESCRIPTOR => {
-                                let len: u8 = if pDescr.len() as u8 >= DevEP0SIZE { DevEP0SIZE } else { pDescr.len() as u8 };
-                                EP0_Databuf.0[..len as usize].copy_from_slice(&pDescr[..len as usize]);
-                                pDescr = &pDescr[len as usize..];
-                                usb.uep0_t_len().write(|w| w.bits(len as u8));
-                                usbh.UEPn(0).toggle_t();
+                                endpoint_write(pDescr);
                             }
 
                             USB_SET_ADDRESS => {
@@ -693,6 +706,7 @@ fn USB_DevTransProcess() {
 
 fn DevHIDMouseReport(mouse: u8) {
     unsafe {
+        // TODO: endpoint_write: copy to EP2, *in* EP
         HIDMouse[0] = mouse;
         let in_databuf = &mut EP2_Databuf.0[64..];
         in_databuf[..HIDMouse.len()].copy_from_slice(&HIDMouse);
@@ -702,6 +716,7 @@ fn DevHIDMouseReport(mouse: u8) {
 
 fn DevHIDKeyReport(key: u8) {
     unsafe {
+        // TODO: endpoint_write: copy to EP1, *in* EP
         HIDKey[2] = key;
         let in_databuf = &mut EP1_Databuf.0[64..];
         in_databuf[..HIDKey.len()].copy_from_slice(&HIDKey);
@@ -711,6 +726,7 @@ fn DevHIDKeyReport(key: u8) {
 
 fn DevEP1_IN_Deal(l: u8) {
     unsafe {
+        // TODO endpoint write to EP1
         let usb = peripherals::USB::steal();
         usb.uep1_t_len().write(|w| w.bits(l));
         usb.uep1_ctrl__r8_uh_setup().modify(|r, w| {
@@ -721,6 +737,7 @@ fn DevEP1_IN_Deal(l: u8) {
 
 fn DevEP2_IN_Deal(l: u8) {
     unsafe {
+        // TODO endpoint write to EP2
         let usb = peripherals::USB::steal();
         usb.uep2_t_len_r8_uh_ep_pid().write(|w| w.bits(l));
         usb.uep2_ctrl_r8_uh_rx_ctrl().modify(|r, w| {
