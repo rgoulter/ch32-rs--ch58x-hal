@@ -483,6 +483,16 @@ unsafe fn hid_init() {
                 if status.is_ok() {
                     let val = u16::from_le_bytes([*value, *value.offset(1)]);
                     println!("! HID CCC write: 0x{:04x}", val);
+
+                    if val == GATT_CFG_NO_OPERATION {
+                        APP_CHANNEL
+                            .try_send(AppEvent::HidReportUnsubscribed(conn_handle))
+                            .unwrap();
+                    } else {
+                        APP_CHANNEL
+                            .try_send(AppEvent::HidReportSubscribed(conn_handle))
+                            .unwrap();
+                    }
                 } else {
                     println!("! on_write_attr sub err {:?}", status);
                 }
@@ -707,6 +717,8 @@ pub enum AppEvent {
     Disconnected(u16),
     ButtonStateSubscribed(u16),
     ButtonStateUnsubscribed(u16),
+    HidReportSubscribed(u16),
+    HidReportUnsubscribed(u16),
     SetLedState(bool),
 }
 
@@ -827,15 +839,9 @@ async fn button_task(pin: AnyPin) {
     // active low
     let button = Input::new(pin, Pull::Up);
 
-    static mut NOTIFY_MSG: gattMsg_t = gattMsg_t {
-        handleValueNoti: attHandleValueNoti_t {
-            handle: 0,
-            len: 1,
-            pValue: ptr::null_mut(),
-        },
-    };
+    let mut last_button_state = false;
 
-    let mut ticker = Ticker::every(Duration::from_millis(1000));
+    let mut ticker = Ticker::every(Duration::from_millis(20));
 
     loop {
         ticker.next().await;
@@ -844,23 +850,59 @@ async fn button_task(pin: AnyPin) {
         if conn_handle == INVALID_CONNHANDLE {
             continue;
         }
-        let val = GATTServApp::read_char_cfg(conn_handle, unsafe { BUTTON_STATE_CLIENT_CHARCFG.as_ptr() });
-        if val & GATT_CLIENT_CFG_NOTIFY != 0 {
-            unsafe {
-                let buf = GATT_bm_alloc(conn_handle, ATT_HANDLE_VALUE_NOTI, 2, ptr::null_mut(), 0) as *mut u8;
-                if !buf.is_null() {
-                    let button_value = button.is_low() as u8;
-                    NOTIFY_MSG.handleValueNoti.pValue = buf;
-                    NOTIFY_MSG.handleValueNoti.len = 1;
-                    *NOTIFY_MSG.handleValueNoti.pValue = button_value;
 
-                    NOTIFY_MSG.handleValueNoti.handle = BLINKY_ATTR_TABLE[2].handle;
+        let hid_cfg = unsafe { GATTServApp::read_char_cfg(conn_handle, HID_REPORT_CLIENT_CHARCFG.as_ptr()) };
 
-                    let _ = GATT_Notification(conn_handle, &NOTIFY_MSG.handleValueNoti, 0).unwrap();
-                } else {
-                    // TODO: handle alloc failed
+        if hid_cfg & GATT_CLIENT_CFG_NOTIFY != 0 {
+            let button_pressed = button.is_low();
+            if button_pressed && !last_button_state {
+                println!("Button pressed, sending 'a'");
+
+                static mut NOTIFY_MSG: gattMsg_t = gattMsg_t {
+                    handleValueNoti: attHandleValueNoti_t {
+                        handle: 0,
+                        len: 8, // HID report size
+                        pValue: ptr::null_mut(),
+                    },
+                };
+
+                // send 'a'
+                unsafe {
+                    let buf =
+                        GATT_bm_alloc(conn_handle, ATT_HANDLE_VALUE_NOTI, 8, ptr::null_mut(), 0) as *mut [u8; 8];
+                    if !buf.is_null() {
+                        (*buf) = [0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00]; // 'a' pressed
+
+                        NOTIFY_MSG.handleValueNoti.pValue = buf as *mut _;
+                        NOTIFY_MSG.handleValueNoti.len = 8;
+                        NOTIFY_MSG.handleValueNoti.handle = HID_ATTR_TABLE[4].handle;
+
+                        let _ = GATT_Notification(conn_handle, &NOTIFY_MSG.handleValueNoti, 0).unwrap();
+                    } else {
+                        println!("GATT_bm_alloc failed");
+                    }
+                }
+
+                Timer::after(Duration::from_millis(10)).await;
+
+                // send release
+                unsafe {
+                    let buf =
+                        GATT_bm_alloc(conn_handle, ATT_HANDLE_VALUE_NOTI, 8, ptr::null_mut(), 0) as *mut [u8; 8];
+                    if !buf.is_null() {
+                        (*buf) = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]; // keys released
+
+                        NOTIFY_MSG.handleValueNoti.pValue = buf as *mut _;
+                        NOTIFY_MSG.handleValueNoti.len = 8;
+                        NOTIFY_MSG.handleValueNoti.handle = HID_ATTR_TABLE[4].handle;
+
+                        let _ = GATT_Notification(conn_handle, &NOTIFY_MSG.handleValueNoti, 0).unwrap();
+                    } else {
+                        println!("GATT_bm_alloc failed");
+                    }
                 }
             }
+            last_button_state = button_pressed;
         }
     }
 }
@@ -960,6 +1002,14 @@ async fn mainloop(task_id: u8, mut sub: EventSubscriber, led: AnyPin) -> ! {
                     }
                     AppEvent::ButtonStateUnsubscribed(_conn_handle) => {
                         println!("button state unsubscribed");
+                        CONN_HANDLE.store(INVALID_CONNHANDLE, Ordering::Relaxed);
+                    }
+                    AppEvent::HidReportSubscribed(conn_handle) => {
+                        println!("hid report subscribed");
+                        CONN_HANDLE.store(conn_handle, Ordering::Relaxed);
+                    }
+                    AppEvent::HidReportUnsubscribed(_conn_handle) => {
+                        println!("hid report unsubscribed");
                         CONN_HANDLE.store(INVALID_CONNHANDLE, Ordering::Relaxed);
                     }
                     AppEvent::SetLedState(on) => {
