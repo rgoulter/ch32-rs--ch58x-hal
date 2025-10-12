@@ -3,6 +3,7 @@
 /trash
 *.bin
 *.hex
+.aider*
 
 # Devenv
 .devenv*
