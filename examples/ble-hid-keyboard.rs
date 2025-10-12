@@ -431,6 +431,14 @@ unsafe fn hid_init() {
         let uuid = u16::from_le_bytes([raw_uuid[0], raw_uuid[1]]);
         println!("! HID on_read_attr UUID: 0x{:04x}", uuid);
         match uuid {
+            HID_REPORT_MAP_UUID => {
+                *plen = HID_REPORT_MAP.len() as _;
+                ptr::copy(HID_REPORT_MAP.as_ptr(), value, *plen as _);
+            }
+            HID_INFO_UUID => {
+                *plen = HID_INFO.len() as _;
+                ptr::copy(HID_INFO.as_ptr(), value, *plen as _);
+            }
             HID_REPORT_UUID => {
                 // empty report
                 *plen = 8;
