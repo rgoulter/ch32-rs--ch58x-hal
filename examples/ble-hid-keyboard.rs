@@ -36,33 +36,19 @@ const fn hi_u16(x: u16) -> u8 {
 
 // GAP - SCAN RSP data (max size = 31 bytes)
 static SCAN_RSP_DATA: &[u8] = &[
-    // complete name
-    0x12, // length of this data
-    GAP_ADTYPE_LOCAL_NAME_COMPLETE,
-    b'B',
-    b'l',
-    b'i',
-    b'n',
-    b'k',
-    b'y',
-    b' ',
-    b'P',
-    b'e',
-    b'r',
-    b'i',
-    b'p',
-    b'h',
-    b'e',
-    b'r',
-    b'a',
-    b'l',
-    // Connection interval range
-    0x05,
+    0x05, // length of this data
     GAP_ADTYPE_SLAVE_CONN_INTERVAL_RANGE,
-    lo_u16(80), // units of 1.25ms, 80=100ms
-    hi_u16(80),
-    lo_u16(800), // units of 1.25ms, 800=1000ms
-    hi_u16(800),
+    lo_u16(DEFAULT_DESIRED_MIN_CONN_INTERVAL),
+    hi_u16(DEFAULT_DESIRED_MIN_CONN_INTERVAL),
+    lo_u16(DEFAULT_DESIRED_MAX_CONN_INTERVAL),
+    hi_u16(DEFAULT_DESIRED_MAX_CONN_INTERVAL),
+    // service UUIDs
+    0x05, // length of this data
+    GAP_ADTYPE_16BIT_MORE,
+    lo_u16(gatt_uuid::HID_SERV_UUID),
+    hi_u16(gatt_uuid::HID_SERV_UUID),
+    lo_u16(gatt_uuid::BATT_SERV_UUID),
+    hi_u16(gatt_uuid::BATT_SERV_UUID),
     // Tx power level
     0x02, // length of this data
     GAP_ADTYPE_POWER_LEVEL,
@@ -75,27 +61,37 @@ static SCAN_RSP_DATA: &[u8] = &[
 // best kept short to conserve power while advertisting)
 #[rustfmt::skip]
 static ADVERT_DATA: &[u8] = &[
+    // flags
     0x02, // length of this data
     GAP_ADTYPE_FLAGS,
-    GAP_ADTYPE_FLAGS_BREDR_NOT_SUPPORTED,
-    // https://www.bluetooth.com/specifications/assigned-numbers/
-    0x04,                             // length of this data including the data type byte
-    GAP_ADTYPE_MANUFACTURER_SPECIFIC, // manufacturer specific advertisement data type
-    lo_u16(0x07D7),                   // 0x07D7, Nanjing Qinheng Microelectronics Co., Ltd.
-    hi_u16(0x07D7),
-    0x01, // remains manufacturer specific data
+    GAP_ADTYPE_FLAGS_LIMITED | GAP_ADTYPE_FLAGS_BREDR_NOT_SUPPORTED,
 
-    // advertised service
-    17,                  // length of this data
-    GAP_ADTYPE_128BIT_COMPLETE,
-    // 00001523-1212-EFDE-1523-785FEABCD123
-    0x23,0xd1,0xbc,0xea,0x5f,0x78,0x23,0x15,0xde,0xef,0x12,0x12,0x23,0x15,0x000,0x000
+    // appearance
+    0x03, // length of this data
+    GAP_ADTYPE_APPEARANCE,
+    lo_u16(0x03C1), // GAP_APPEARE_HID_KEYBOARD
+    hi_u16(0x03C1),
+
+    0x0D,                           // length of this data
+    GAP_ADTYPE_LOCAL_NAME_COMPLETE, // AD Type = Complete local name
+    b'H',
+    b'I',
+    b'D',
+    b' ',
+    b'K',
+    b'e',
+    b'y',
+    b'b',
+    b'o',
+    b'a',
+    b'r',
+    b'd',
 ];
 
 // GAP GATT Attributes
 // len = 21 GAP_DEVICE_NAME_LEN
 // max_len = 248
-static ATT_DEVICE_NAME: &[u8] = b"ch58x-hal peripheral";
+static ATT_DEVICE_NAME: &[u8] = b"HID Keyboard";
 
 // System ID characteristic
 const DEVINFO_SYSTEM_ID_LEN: usize = 8;
@@ -436,13 +432,13 @@ pub enum AppEvent {
 static APP_CHANNEL: Channel<CriticalSectionRawMutex, AppEvent, 3> = Channel::new();
 
 /// Default desired minimum connection interval (units of 1.25ms)
-const DEFAULT_DESIRED_MIN_CONN_INTERVAL: u16 = 20;
+const DEFAULT_DESIRED_MIN_CONN_INTERVAL: u16 = 8;
 /// Default desired maximum connection interval (units of 1.25ms)
-const DEFAULT_DESIRED_MAX_CONN_INTERVAL: u16 = 160;
+const DEFAULT_DESIRED_MAX_CONN_INTERVAL: u16 = 8;
 /// Default desired slave latency to use if parameter update request
-const DEFAULT_DESIRED_SLAVE_LATENCY: u16 = 1;
+const DEFAULT_DESIRED_SLAVE_LATENCY: u16 = 0;
 /// Default supervision timeout value (units of 10ms)
-const DEFAULT_DESIRED_CONN_TIMEOUT: u16 = 1000;
+const DEFAULT_DESIRED_CONN_TIMEOUT: u16 = 500;
 
 // time units 625us
 const DEFAULT_FAST_ADV_INTERVAL: u16 = 32;
