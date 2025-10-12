@@ -93,6 +93,23 @@ static ADVERT_DATA: &[u8] = &[
 // max_len = 248
 static ATT_DEVICE_NAME: &[u8] = b"HID Keyboard";
 
+// Device Information Service
+const MANUFACTURER_NAME_UUID: u16 = 0x2A29;
+const MODEL_NUMBER_UUID: u16 = 0x2A24;
+const PNP_ID_UUID: u16 = 0x2A50;
+
+static DEVINFO_MANUFACTURER_NAME: &[u8] = b"WCH-BLE";
+static DEVINFO_MODEL_NUMBER: &[u8] = b"CH582";
+static DEVINFO_PNP_ID: [u8; 7] = [
+    0x01,           // Vendor ID source (1=Bluetooth SIG)
+    lo_u16(0x07D7), // Vendor ID
+    hi_u16(0x07D7),
+    lo_u16(0x0001), // Product ID
+    hi_u16(0x0001),
+    lo_u16(0x0100), // Product Version
+    hi_u16(0x0100),
+];
+
 // System ID characteristic
 const DEVINFO_SYSTEM_ID_LEN: usize = 8;
 
@@ -100,77 +117,87 @@ static mut SYSTEM_ID: [u8; 8] = [0u8; 8];
 // The list must start with a Service attribute followed by
 // all attributes associated with this Service attribute.
 // Must use static mut fixed sized array, as it will be changed by Service to assign handles.
-static mut DEVICE_INFO_TABLE: [GattAttribute; 7] =
-    [
-        // Device Information Service
-        GattAttribute {
-            type_: GattAttrType::PRIMARY_SERVICE,
-            permissions: GATT_PERMIT_READ,
-            handle: 0,
-            // The first must be a Service attribute
-            value: &GattAttrType {
-                len: ATT_BT_UUID_SIZE,
-                uuid: &gatt_uuid::DEVINFO_SERV_UUID as *const _ as *const u8,
-            } as *const _ as _,
+static mut DEVICE_INFO_TABLE: [GattAttribute; 9] = [
+    // Device Information Service
+    GattAttribute {
+        type_: GattAttrType::PRIMARY_SERVICE,
+        permissions: GATT_PERMIT_READ,
+        handle: 0,
+        // The first must be a Service attribute
+        value: &GattAttrType {
+            len: ATT_BT_UUID_SIZE,
+            uuid: &gatt_uuid::DEVINFO_SERV_UUID as *const _ as *const u8,
+        } as *const _ as _,
+    },
+    // System ID Declaration
+    GattAttribute {
+        type_: GattAttrType::CHARACTERISTIC,
+        permissions: GATT_PERMIT_READ,
+        handle: 0,
+        value: &GATT_PROP_READ as *const u8,
+    },
+    // System ID Value
+    GattAttribute {
+        type_: GattAttrType {
+            len: ATT_BT_UUID_SIZE,
+            uuid: &gatt_uuid::SYSTEM_ID_UUID as *const _ as _,
         },
-        // System ID Declaration
-        GattAttribute {
-            type_: GattAttrType::CHARACTERISTIC,
-            permissions: GATT_PERMIT_READ,
-            handle: 0,
-            value: &GATT_PROP_READ as *const u8,
+        permissions: GATT_PERMIT_READ,
+        handle: 0,
+        value: ptr::null(),
+    },
+    // Manufacturer Name String Declaration
+    GattAttribute {
+        type_: GattAttrType::CHARACTERISTIC,
+        permissions: GATT_PERMIT_READ,
+        handle: 0,
+        value: &GATT_PROP_READ as *const _ as _,
+    },
+    // Manufacturer Name String Value
+    GattAttribute {
+        type_: GattAttrType {
+            len: ATT_BT_UUID_SIZE,
+            uuid: &MANUFACTURER_NAME_UUID as *const _ as _,
         },
-        // System ID Value
-        GattAttribute {
-            type_: GattAttrType {
-                len: ATT_BT_UUID_SIZE,
-                uuid: &gatt_uuid::SYSTEM_ID_UUID as *const _ as _,
-            },
-            permissions: GATT_PERMIT_READ,
-            handle: 0,
-            value: unsafe { SYSTEM_ID.as_ptr() },
+        permissions: GATT_PERMIT_READ,
+        handle: 0,
+        value: ptr::null(),
+    },
+    // Model Number String Declaration
+    GattAttribute {
+        type_: GattAttrType::CHARACTERISTIC,
+        permissions: GATT_PERMIT_READ,
+        handle: 0,
+        value: &GATT_PROP_READ as *const _ as _,
+    },
+    // Model Number String Value
+    GattAttribute {
+        type_: GattAttrType {
+            len: ATT_BT_UUID_SIZE,
+            uuid: &MODEL_NUMBER_UUID as *const _ as _,
         },
-        // Serial Number String Declaration
-        GattAttribute {
-            type_: GattAttrType {
-                len: ATT_BT_UUID_SIZE,
-                uuid: unsafe { gatt_uuid::characterUUID.as_ptr() },
-            },
-            permissions: GATT_PERMIT_READ,
-            handle: 0,
-            value: &GATT_PROP_READ as *const _ as _,
+        permissions: GATT_PERMIT_READ,
+        handle: 0,
+        value: ptr::null(),
+    },
+    // PnP ID Declaration
+    GattAttribute {
+        type_: GattAttrType::CHARACTERISTIC,
+        permissions: GATT_PERMIT_READ,
+        handle: 0,
+        value: &GATT_PROP_READ as *const _ as _,
+    },
+    // PnP ID Value
+    GattAttribute {
+        type_: GattAttrType {
+            len: ATT_BT_UUID_SIZE,
+            uuid: &PNP_ID_UUID as *const _ as _,
         },
-        // Serial Number Value
-        GattAttribute {
-            type_: GattAttrType {
-                len: ATT_BT_UUID_SIZE,
-                uuid: &gatt_uuid::SERIAL_NUMBER_UUID as *const _ as _,
-            },
-            permissions: GATT_PERMIT_READ,
-            handle: 0,
-            value: ptr::null(),
-        },
-        // Temperature
-        GattAttribute {
-            type_: GattAttrType {
-                len: ATT_BT_UUID_SIZE,
-                uuid: unsafe { gatt_uuid::characterUUID.as_ptr() },
-            },
-            permissions: GATT_PERMIT_READ,
-            handle: 0,
-            value: &GATT_PROP_READ as *const _ as _,
-        },
-        // Serial Number Value
-        GattAttribute {
-            type_: GattAttrType {
-                len: ATT_BT_UUID_SIZE,
-                uuid: &gatt_uuid::TEMP_UUID as *const _ as _,
-            },
-            permissions: GATT_PERMIT_READ,
-            handle: 0,
-            value: ptr::null(),
-        },
-    ];
+        permissions: GATT_PERMIT_READ,
+        handle: 0,
+        value: ptr::null(),
+    },
+];
 
 #[inline]
 unsafe fn devinfo_init() {
@@ -194,16 +221,17 @@ unsafe fn devinfo_init() {
                     *plen = DEVINFO_SYSTEM_ID_LEN as _;
                     ptr::copy(SYSTEM_ID.as_ptr(), value, DEVINFO_SYSTEM_ID_LEN);
                 }
-                gatt_uuid::SERIAL_NUMBER_UUID => {
-                    let out = b"No. 9527";
-                    *plen = out.len() as _;
-                    core::ptr::copy(out.as_ptr(), value, out.len());
+                MANUFACTURER_NAME_UUID => {
+                    *plen = DEVINFO_MANUFACTURER_NAME.len() as _;
+                    ptr::copy(DEVINFO_MANUFACTURER_NAME.as_ptr(), value, *plen as _);
                 }
-                gatt_uuid::TEMP_UUID => {
-                    println!("temp uuid {:04x} {:p} {}", uuid, value, max_len);
-                    let val: i16 = 32_00; // 0.01 degC
-                    *plen = size_of_val(&val) as _;
-                    core::ptr::copy(&val as *const _ as _, value, *plen as _);
+                MODEL_NUMBER_UUID => {
+                    *plen = DEVINFO_MODEL_NUMBER.len() as _;
+                    ptr::copy(DEVINFO_MODEL_NUMBER.as_ptr(), value, *plen as _);
+                }
+                PNP_ID_UUID => {
+                    *plen = DEVINFO_PNP_ID.len() as _;
+                    ptr::copy(DEVINFO_PNP_ID.as_ptr(), value, *plen as _);
                 }
                 _ => {
                     return ATT_ERR_ATTR_NOT_FOUND;
@@ -226,6 +254,251 @@ unsafe fn devinfo_init() {
         )
         .unwrap();
     }
+}
+
+// HID Service
+const HID_INFO_UUID: u16 = 0x2A4A;
+const HID_REPORT_MAP_UUID: u16 = 0x2A4B;
+const HID_CTRL_PT_UUID: u16 = 0x2A4C;
+const HID_REPORT_UUID: u16 = 0x2A4D;
+const HID_PROTO_MODE_UUID: u16 = 0x2A4E;
+
+const HID_KBD_FLAGS_REMOTE_WAKE: u8 = 0x01;
+const HID_KBD_FLAGS_NORMALLY_CONNECTABLE: u8 = 0x02;
+
+static HID_INFO: [u8; 4] = [
+    lo_u16(0x0111), // bcdHID
+    hi_u16(0x0111),
+    0x00, // bCountryCode
+    HID_KBD_FLAGS_REMOTE_WAKE | HID_KBD_FLAGS_NORMALLY_CONNECTABLE, // bFlags
+];
+
+static HID_REPORT_MAP: &[u8] = &[
+    0x05, 0x01, // USAGE_PAGE (Generic Desktop)
+    0x09, 0x06, // USAGE (Keyboard)
+    0xa1, 0x01, // COLLECTION (Application)
+    0x05, 0x07, // USAGE_PAGE (Keyboard)
+    0x19, 0xe0, // USAGE_MINIMUM (Keyboard LeftControl)
+    0x29, 0xe7, // USAGE_MAXIMUM (Keyboard Right GUI)
+    0x15, 0x00, // LOGICAL_MINIMUM (0)
+    0x25, 0x01, // LOGICAL_MAXIMUM (1)
+    0x75, 0x01, // REPORT_SIZE (1)
+    0x95, 0x08, // REPORT_COUNT (8)
+    0x81, 0x02, // INPUT (Data,Var,Abs)
+    0x95, 0x01, // REPORT_COUNT (1)
+    0x75, 0x08, // REPORT_SIZE (8)
+    0x81, 0x03, // INPUT (Cnst,Var,Abs)
+    0x95, 0x05, // REPORT_COUNT (5)
+    0x75, 0x01, // REPORT_SIZE (1)
+    0x05, 0x08, // USAGE_PAGE (LEDs)
+    0x19, 0x01, // USAGE_MINIMUM (Num Lock)
+    0x29, 0x05, // USAGE_MAXIMUM (Kana)
+    0x91, 0x02, // OUTPUT (Data,Var,Abs)
+    0x95, 0x01, // REPORT_COUNT (1)
+    0x75, 0x03, // REPORT_SIZE (3)
+    0x91, 0x03, // OUTPUT (Cnst,Var,Abs)
+    0x95, 0x06, // REPORT_COUNT (6)
+    0x75, 0x08, // REPORT_SIZE (8)
+    0x15, 0x00, // LOGICAL_MINIMUM (0)
+    0x25, 0x65, // LOGICAL_MAXIMUM (101)
+    0x05, 0x07, // USAGE_PAGE (Keyboard)
+    0x19, 0x00, // USAGE_MINIMUM (Reserved (no event indicated))
+    0x29, 0x65, // USAGE_MAXIMUM (Keyboard Application)
+    0x81, 0x00, // INPUT (Data,Ary,Abs)
+    0xc0, // END_COLLECTION
+];
+
+static mut HID_REPORT_CLIENT_CHARCFG: [gattCharCfg_t; 4] = unsafe { core::mem::zeroed() };
+// HID report
+static mut HID_PROTOCOL_MODE: u8 = 1; // HID_PROTOCOL_MODE_REPORT
+
+static mut HID_ATTR_TABLE: [GattAttribute; 12] = [
+    // HID Service
+    GattAttribute {
+        type_: GattAttrType::PRIMARY_SERVICE,
+        permissions: GATT_PERMIT_READ,
+        handle: 0,
+        value: &GattAttrType {
+            len: ATT_BT_UUID_SIZE,
+            uuid: &gatt_uuid::HID_SERV_UUID as *const _ as _,
+        } as *const _ as _,
+    },
+    // HID Report Map Declaration
+    GattAttribute {
+        type_: GattAttrType::CHARACTERISTIC,
+        permissions: GATT_PERMIT_READ,
+        handle: 0,
+        value: &GATT_PROP_READ as *const _ as _,
+    },
+    // HID Report Map Value
+    GattAttribute {
+        type_: GattAttrType {
+            len: ATT_BT_UUID_SIZE,
+            uuid: &HID_REPORT_MAP_UUID as *const _ as _,
+        },
+        permissions: GATT_PERMIT_READ,
+        handle: 0,
+        value: HID_REPORT_MAP.as_ptr(),
+    },
+    // HID Report Declaration
+    GattAttribute {
+        type_: GattAttrType::CHARACTERISTIC,
+        permissions: GATT_PERMIT_READ,
+        handle: 0,
+        value: &(GATT_PROP_READ | GATT_PROP_NOTIFY | GATT_PROP_WRITE) as *const _ as _,
+    },
+    // HID Report Value
+    GattAttribute {
+        type_: GattAttrType {
+            len: ATT_BT_UUID_SIZE,
+            uuid: &HID_REPORT_UUID as *const _ as _,
+        },
+        permissions: GATT_PERMIT_READ | GATT_PERMIT_WRITE,
+        handle: 0,
+        value: ptr::null(),
+    },
+    // HID Report Client Characteristic Configuration
+    GattAttribute {
+        type_: GattAttrType::CLIENT_CHAR_CFG,
+        permissions: GATT_PERMIT_READ | GATT_PERMIT_WRITE,
+        handle: 0,
+        value: unsafe { HID_REPORT_CLIENT_CHARCFG.as_ptr() as _ },
+    },
+    // HID Protocol Mode Declaration
+    GattAttribute {
+        type_: GattAttrType::CHARACTERISTIC,
+        permissions: GATT_PERMIT_READ,
+        handle: 0,
+        value: &(GATT_PROP_READ | GATT_PROP_WRITE_NO_RSP) as *const _ as _,
+    },
+    // HID Protocol Mode Value
+    GattAttribute {
+        type_: GattAttrType {
+            len: ATT_BT_UUID_SIZE,
+            uuid: &HID_PROTO_MODE_UUID as *const _ as _,
+        },
+        permissions: GATT_PERMIT_READ | GATT_PERMIT_WRITE,
+        handle: 0,
+        value: unsafe { &HID_PROTOCOL_MODE as *const _ as _ },
+    },
+    // HID Information Declaration
+    GattAttribute {
+        type_: GattAttrType::CHARACTERISTIC,
+        permissions: GATT_PERMIT_READ,
+        handle: 0,
+        value: &GATT_PROP_READ as *const _ as _,
+    },
+    // HID Information Value
+    GattAttribute {
+        type_: GattAttrType {
+            len: ATT_BT_UUID_SIZE,
+            uuid: &HID_INFO_UUID as *const _ as _,
+        },
+        permissions: GATT_PERMIT_READ,
+        handle: 0,
+        value: HID_INFO.as_ptr(),
+    },
+    // HID Control Point Declaration
+    GattAttribute {
+        type_: GattAttrType::CHARACTERISTIC,
+        permissions: GATT_PERMIT_READ,
+        handle: 0,
+        value: &GATT_PROP_WRITE_NO_RSP as *const _ as _,
+    },
+    // HID Control Point Value
+    GattAttribute {
+        type_: GattAttrType {
+            len: ATT_BT_UUID_SIZE,
+            uuid: &HID_CTRL_PT_UUID as *const _ as _,
+        },
+        permissions: GATT_PERMIT_WRITE,
+        handle: 0,
+        value: ptr::null(),
+    },
+];
+
+unsafe fn hid_init() {
+    unsafe extern "C" fn hid_on_read_attr(
+        _conn_handle: u16,
+        attr: *mut GattAttribute,
+        value: *mut u8,
+        plen: *mut u16,
+        _offset: u16,
+        _max_len: u16,
+        _method: u8,
+    ) -> u8 {
+        let raw_uuid = slice::from_raw_parts((*attr).type_.uuid, 2);
+        let uuid = u16::from_le_bytes([raw_uuid[0], raw_uuid[1]]);
+        println!("! HID on_read_attr UUID: 0x{:04x}", uuid);
+        match uuid {
+            HID_REPORT_UUID => {
+                // empty report
+                *plen = 8;
+                for i in 0..8 {
+                    *value.offset(i as _) = 0;
+                }
+            }
+            HID_PROTO_MODE_UUID => {
+                *plen = 1;
+                *value = HID_PROTOCOL_MODE;
+            }
+            _ => {
+                return ATT_ERR_ATTR_NOT_FOUND;
+            }
+        }
+
+        0
+    }
+
+    unsafe extern "C" fn hid_on_write_attr(
+        conn_handle: u16,
+        attr: *mut GattAttribute,
+        value: *mut u8,
+        len: u16,
+        offset: u16,
+        _method: u8,
+    ) -> u8 {
+        let raw_uuid = slice::from_raw_parts((*attr).type_.uuid, 2);
+        let uuid = u16::from_le_bytes([raw_uuid[0], raw_uuid[1]]);
+        println!("! HID on_write_attr UUID: 0x{:04x}", uuid);
+
+        match uuid {
+            gatt_uuid::GATT_CLIENT_CHAR_CFG_UUID => {
+                let status = GATTServApp::process_ccc_write_req(
+                    conn_handle,
+                    attr,
+                    value,
+                    len,
+                    offset,
+                    GATT_CLIENT_CFG_NOTIFY,
+                );
+                if status.is_ok() {
+                    let val = u16::from_le_bytes([*value, *value.offset(1)]);
+                    println!("! HID CCC write: 0x{:04x}", val);
+                } else {
+                    println!("! on_write_attr sub err {:?}", status);
+                }
+            }
+            HID_PROTO_MODE_UUID => {
+                if len == 1 {
+                    HID_PROTOCOL_MODE = *value;
+                }
+            }
+            _ => {
+                return ATT_ERR_ATTR_NOT_FOUND;
+            }
+        }
+        0
+    }
+
+    static HID_SERVICE_CB: gattServiceCBs_t = gattServiceCBs_t {
+        pfnReadAttrCB: Some(hid_on_read_attr),
+        pfnWriteAttrCB: Some(hid_on_write_attr),
+        pfnAuthorizeAttrCB: None,
+    };
+    GATTServApp::init_char_cfg(INVALID_CONNHANDLE, HID_REPORT_CLIENT_CHARCFG.as_mut_ptr());
+    GATTServApp::register_service(&mut HID_ATTR_TABLE[..], GATT_MAX_ENCRYPT_KEY_SIZE, &HID_SERVICE_CB)
+        .unwrap();
 }
 
 /// GAP Role init
@@ -631,6 +904,7 @@ async fn main(spawner: Spawner) -> ! {
     unsafe {
         common_init();
         devinfo_init();
+        hid_init();
         lbs_init();
     }
 
