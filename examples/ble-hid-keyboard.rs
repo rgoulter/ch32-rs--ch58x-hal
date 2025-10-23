@@ -545,7 +545,7 @@ unsafe fn common_init() {
         let passkey: u32 = 0; // passkey "000000"
         let pair_mode = GAPBOND_PAIRING_MODE_WAIT_FOR_REQ;
         let mitm = false;
-        let io_cap = GAPBOND_IO_CAP_DISPLAY_ONLY;
+        let io_cap = GAPBOND_IO_CAP_NO_INPUT_NO_OUTPUT;
         let bonding = true;
         let _ = GAPBondMgr_SetParameter(
             GAPBOND_PERI_DEFAULT_PASSCODE,
