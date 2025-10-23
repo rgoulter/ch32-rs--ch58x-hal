@@ -811,8 +811,19 @@ fn peripheral_start(task_id: u8) {
 
     // Deivce start
     unsafe {
+        unsafe extern "C" fn on_gap_passcode_request(
+            _device_addr: *mut u8,
+            conn_handle: u16,
+            _ui_inputs: u8,
+            _ui_outputs: u8,
+        ) {
+            println!("GAP Passcode request. Responding with 0.");
+            let passcode: u32 = 0; // DEFAULT_PASSCODE is 0
+            GAPBondMgr_PasscodeRsp(conn_handle, 0, passcode); // SUCCESS is 0
+        }
+
         static BOND_CB: gapBondCBs_t = gapBondCBs_t {
-            passcodeCB: None,
+            passcodeCB: Some(on_gap_passcode_request),
             pairStateCB: None,
             oobCB: None,
         };
