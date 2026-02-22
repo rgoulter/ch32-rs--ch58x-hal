@@ -304,7 +304,7 @@ unsafe fn devinfo_init() {
         ) -> u8 {
             let raw_uuid = slice::from_raw_parts((*attr).type_.uuid, 2);
             let uuid = u16::from_le_bytes([raw_uuid[0], raw_uuid[1]]);
-            println!("! on_read_attr UUID: 0x{:04x}", uuid);
+            println!("gattServiceCBs_t .pfnReadAttrCB: UUID: 0x{:04x}", uuid);
 
             match uuid {
                 gatt_uuid::SYSTEM_ID_UUID => {
@@ -522,7 +522,7 @@ unsafe fn hid_init() {
     ) -> u8 {
         let raw_uuid = slice::from_raw_parts((*attr).type_.uuid, 2);
         let uuid = u16::from_le_bytes([raw_uuid[0], raw_uuid[1]]);
-        println!("! HID on_read_attr UUID: 0x{:04x}", uuid);
+        println!("gattServiceCBs_t.pfnReadAttrCB: UUID: 0x{:04x}", uuid);
         match uuid {
             HID_REPORT_MAP_UUID => {
                 *plen = HID_REPORT_MAP.len() as _;
@@ -562,7 +562,7 @@ unsafe fn hid_init() {
     ) -> u8 {
         let raw_uuid = slice::from_raw_parts((*attr).type_.uuid, 2);
         let uuid = u16::from_le_bytes([raw_uuid[0], raw_uuid[1]]);
-        println!("! HID on_write_attr UUID: 0x{:04x}", uuid);
+        println!("gattServiceCBs_t.pfnWriteAttrCB: UUID: 0x{:04x}", uuid);
 
         match uuid {
             gatt_uuid::GATT_CLIENT_CHAR_CFG_UUID => {
@@ -576,7 +576,7 @@ unsafe fn hid_init() {
                 );
                 if status.is_ok() {
                     let val = u16::from_le_bytes([*value, *value.offset(1)]);
-                    println!("! HID CCC write: 0x{:04x}", val);
+                    println!("gattServiceCBs_t.pfnWriteAttrCB: CCC write: 0x{:04x}", val);
 
                     if val == GATT_CFG_NO_OPERATION {
                         APP_CHANNEL
@@ -588,7 +588,7 @@ unsafe fn hid_init() {
                             .unwrap();
                     }
                 } else {
-                    println!("! on_write_attr sub err {:?}", status);
+                    println!("gattServiceCBs_t.pfnWriteAttrCB: CCC sub err {:?}", status);
                 }
             }
             HID_PROTO_MODE_UUID => {
@@ -843,9 +843,10 @@ const DEFAULT_SLOW_ADV_DURATION: u16 = 0; // continuous // XXX no equivalent in 
 
 // ported handling hiddev tmos START_DEVICE_EVT from HidDev_ProcessEvent in hiddev.c
 fn peripheral_start(task_id: u8) {
+    // ported from hidDevGapStateCB in hiddev.c
     // Profile State Change Callbacks
     unsafe extern "C" fn on_gap_state_change(new_state: gapRole_States_t, event: *mut gapRoleEvent_t) {
-        println!("in on_gap_state_change: {}", new_state);
+        println!("gapRolesCBs_t.pfnStateChange: {}", new_state);
         let event = &*event;
 
         // state machine, requires last state
@@ -857,7 +858,7 @@ fn peripheral_start(task_id: u8) {
             GAPROLE_CONNECTED => {
                 // Peripheral_LinkEstablished
                 if event.gap.opcode == GAP_LINK_ESTABLISHED_EVENT {
-                    println!("connected.. !!");
+                    println!("gapRolesCBs_t.pfnStateChange: connected!");
                     CURRENT_CONN_HANDLE = event.linkCmpl.connectionHandle;
 
                     let _ = APP_CHANNEL.try_send(AppEvent::Connected(CURRENT_CONN_HANDLE));
@@ -887,7 +888,7 @@ fn peripheral_start(task_id: u8) {
             }
             // if started
             GAPROLE_STARTED => {
-                println!("initialized..");
+                println!("gapRolesCBs_t.pfnStateChange: initialized");
                 let mut system_id = [0u8; 8]; // DEVINFO_SYSTEM_ID_LEN
                 GAPRole_GetParameter(GAPROLE_BD_ADDR, system_id.as_mut_ptr() as _).unwrap();
 
@@ -904,7 +905,7 @@ fn peripheral_start(task_id: u8) {
             }
             GAPROLE_ADVERTISING => {} // now advertising
             _ => {
-                println!("!!! on_state_change unhandled state: {}", new_state);
+                println!("gapRolesCBs_t.pfnStateChange: !!! unhandled state: {}", new_state);
             }
         }
 
@@ -920,7 +921,7 @@ fn peripheral_start(task_id: u8) {
             _ui_inputs: u8,
             _ui_outputs: u8,
         ) {
-            println!("GAP Passcode request. Responding with 0.");
+            println!("gapBondCBs_t.passcodeCB: GAP Passcode request. Responding with 0.");
             let passcode: u32 = 0; // DEFAULT_PASSCODE is 0
             GAPBondMgr_PasscodeRsp(conn_handle, 0, passcode); // SUCCESS is 0
         }
@@ -931,15 +932,16 @@ fn peripheral_start(task_id: u8) {
             pairStateCB: None,
             oobCB: None,
         };
+        // ported from hidDev_PeripheralCBs in hiddev.c
         // peripheralStateNotificationCB
         static APP_CB: gapRolesCBs_t = gapRolesCBs_t {
             pfnStateChange: Some(on_gap_state_change),
             pfnRssiRead: None,
-            pfnParamUpdate: None,
+            pfnParamUpdate: None, // XXX hidDevParamUpdateCB not ported?
         };
         // Start the Device
         let r = GAPRole_PeripheralStartDevice(task_id, &BOND_CB, &APP_CB);
-        println!("Start device {:?}", r);
+        println!("Start device; GAPRole_PeripheralStartDevice result={:?}", r);
     }
 }
 
@@ -997,7 +999,7 @@ async fn button_task(pin: AnyPin) {
 
                         let _ = GATT_Notification(conn_handle, &NOTIFY_MSG.handleValueNoti, 0).unwrap();
                     } else {
-                        println!("GATT_bm_alloc failed");
+                        println!("in embassy button_task: press: GATT_bm_alloc failed");
                     }
                 }
 
@@ -1016,7 +1018,7 @@ async fn button_task(pin: AnyPin) {
 
                         let _ = GATT_Notification(conn_handle, &NOTIFY_MSG.handleValueNoti, 0).unwrap();
                     } else {
-                        println!("GATT_bm_alloc failed");
+                        println!("in embassy button_task: release: GATT_bm_alloc failed");
                     }
                 }
             }
@@ -1106,19 +1108,19 @@ async fn mainloop(task_id: u8, mut sub: EventSubscriber, led: AnyPin) -> ! {
                         CONN_HANDLE.store(INVALID_CONNHANDLE, Ordering::Relaxed);
                     },
                     AppEvent::ButtonStateSubscribed(conn_handle) => {
-                        println!("button state subscribed");
+                        println!("mainloop: button state subscribed");
                         CONN_HANDLE.store(conn_handle, Ordering::Relaxed);
                     }
                     AppEvent::ButtonStateUnsubscribed(_conn_handle) => {
-                        println!("button state unsubscribed");
+                        println!("mainloop: button state unsubscribed");
                         CONN_HANDLE.store(INVALID_CONNHANDLE, Ordering::Relaxed);
                     }
                     AppEvent::HidReportSubscribed(conn_handle) => {
-                        println!("hid report subscribed");
+                        println!("mainloop: hid report subscribed");
                         CONN_HANDLE.store(conn_handle, Ordering::Relaxed);
                     }
                     AppEvent::HidReportUnsubscribed(_conn_handle) => {
-                        println!("hid report unsubscribed");
+                        println!("mainloop: hid report unsubscribed");
                         CONN_HANDLE.store(INVALID_CONNHANDLE, Ordering::Relaxed);
                     }
                     AppEvent::SetLedState(on) => {
@@ -1179,7 +1181,7 @@ fn handle_tmos_event(event: &TmosEvent) {
             match opcode {
                 GAP_SCAN_REQUEST_EVENT => {
                     println!(
-                        "GAP scan request from {:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x} ...",
+                        "handle_tmos_event: GAP scan request from {:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x} ...",
                         (*msg).scanReqEvt.scannerAddr[0],
                         (*msg).scanReqEvt.scannerAddr[1],
                         (*msg).scanReqEvt.scannerAddr[2],
@@ -1190,14 +1192,14 @@ fn handle_tmos_event(event: &TmosEvent) {
                 }
                 GAP_PHY_UPDATE_EVENT => {
                     println!(
-                        "GAP phy update Rx:{:x} Tx:{:x}",
+                        "handle_tmos_event: GAP phy update Rx:{:x} Tx:{:x}",
                         (*msg).linkPhyUpdate.connRxPHYS,
                         (*msg).linkPhyUpdate.connTxPHYS,
                     );
                 }
                 GAP_LINK_PARAM_UPDATE_EVENT => {
                     println!(
-                        "GAP link param update status: {:x} interval: {:x} latency: {:x} timeout: {:x}",
+                        "handle_tmos_event: GAP link param update status: {:x} interval: {:x} latency: {:x} timeout: {:x}",
                         (*msg).linkUpdate.status,
                         (*msg).linkUpdate.connInterval,
                         (*msg).linkUpdate.connLatency,
@@ -1213,10 +1215,10 @@ fn handle_tmos_event(event: &TmosEvent) {
         TmosEvent::GATT_MSG_EVENT => {
             let msg = event.0 as *const gattMsgEvent_t;
             let method = unsafe { (*msg).method };
-            println!("GATT_MSG_EVENT: {:p} {:x}", msg, method);
+            println!("handle_tmos_event: GATT_MSG_EVENT: {:p} {:x}", msg, method);
         }
         _ => {
-            println!("peripheral got event: {:?} id=0x{:02x}", event, event.message_id());
+            println!("handle_tmos_event: peripheral got event: {:?} id=0x{:02x}", event, event.message_id());
         }
     }
 }
