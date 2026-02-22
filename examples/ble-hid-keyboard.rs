@@ -1,6 +1,4 @@
-//! LED Button Service (LBS)
-//!
-//! See-also: https://developer.nordicsemi.com/nRF_Connect_SDK/doc/latest/nrf/libraries/bluetooth_services/services/lbs.html
+//! HID Service
 
 #![no_std]
 #![no_main]
@@ -20,6 +18,16 @@ use embassy_time::{Duration, Ticker, Timer};
 use hal::ble::ffi::*;
 use hal::ble::gap::*;
 use hal::ble::gatt::*;
+use hal::ble::gatt_uuid::{
+    MANUFACTURER_NAME_UUID,
+    MODEL_NUMBER_UUID,
+    PNP_ID_UUID,
+    HID_INFORMATION_UUID as HID_INFO_UUID,
+    REPORT_MAP_UUID as HID_REPORT_MAP_UUID,
+    HID_CTRL_PT_UUID,
+    REPORT_UUID as HID_REPORT_UUID,
+    PROTOCOL_MODE_UUID as HID_PROTO_MODE_UUID,
+};
 use hal::ble::gattservapp::*;
 use hal::ble::{gatt_uuid, EventSubscriber, TmosEvent};
 use hal::gpio::{AnyPin, Input, Level, Output, OutputDrive, Pin, Pull};
@@ -27,13 +35,16 @@ use hal::rtc::Rtc;
 use hal::uart::UartTx;
 use hal::{ble, peripherals, println};
 
+// ported from LO_UINT16 in CH58xBLE_LIB.h
 const fn lo_u16(x: u16) -> u8 {
     (x & 0xff) as u8
 }
+// ported from HI_UINT16 in CH58xBLE_LIB.h
 const fn hi_u16(x: u16) -> u8 {
     (x >> 8) as u8
 }
 
+// ported from scanRspData in hidkbd.c
 // GAP - SCAN RSP data (max size = 31 bytes)
 static SCAN_RSP_DATA: &[u8] = &[
     0x05, // length of this data
@@ -42,6 +53,7 @@ static SCAN_RSP_DATA: &[u8] = &[
     hi_u16(DEFAULT_DESIRED_MIN_CONN_INTERVAL),
     lo_u16(DEFAULT_DESIRED_MAX_CONN_INTERVAL),
     hi_u16(DEFAULT_DESIRED_MAX_CONN_INTERVAL),
+
     // service UUIDs
     0x05, // length of this data
     GAP_ADTYPE_16BIT_MORE,
@@ -49,14 +61,14 @@ static SCAN_RSP_DATA: &[u8] = &[
     hi_u16(gatt_uuid::HID_SERV_UUID),
     lo_u16(gatt_uuid::BATT_SERV_UUID),
     hi_u16(gatt_uuid::BATT_SERV_UUID),
+
     // Tx power level
     0x02, // length of this data
     GAP_ADTYPE_POWER_LEVEL,
     0, // 0dBm
 ];
 
-// const SIMPLEPROFILE_SERV_UUID: u16 = 0xFFE0;
-
+// ported from advertData in hidkbd.c
 // GAP - Advertisement data (max size = 31 bytes, though this is
 // best kept short to conserve power while advertisting)
 #[rustfmt::skip]
@@ -88,16 +100,13 @@ static ADVERT_DATA: &[u8] = &[
     b'd',
 ];
 
+// ported from attDeviceName[GAP_DEVICE_NAME_LEN] in hidkbd.c
 // GAP GATT Attributes
 // len = 21 GAP_DEVICE_NAME_LEN
 // max_len = 248
 static ATT_DEVICE_NAME: &[u8] = b"HID Keyboard";
 
-// Device Information Service
-const MANUFACTURER_NAME_UUID: u16 = 0x2A29;
-const MODEL_NUMBER_UUID: u16 = 0x2A24;
-const PNP_ID_UUID: u16 = 0x2A50;
-
+// devInfoMfrName, devInfoModelNumber, devInfoPnpId in devinfoservice.c
 static DEVINFO_MANUFACTURER_NAME: &[u8] = b"WCH-BLE";
 static DEVINFO_MODEL_NUMBER: &[u8] = b"CH582";
 static DEVINFO_PNP_ID: [u8; 7] = [
@@ -110,10 +119,13 @@ static DEVINFO_PNP_ID: [u8; 7] = [
     hi_u16(0x0100),
 ];
 
+// ported from DEVINFO_SYSTEM_ID_LEN from devinfoservice.h
 // System ID characteristic
 const DEVINFO_SYSTEM_ID_LEN: usize = 8;
 
+// ported from devInfoSystemId[DEVINFO_SYSTEM_ID_LEN] in devinfoservice.c
 static mut SYSTEM_ID: [u8; 8] = [0u8; 8];
+// ported from devInfoAttrTbl in devinfoservice.c
 // The list must start with a Service attribute followed by
 // all attributes associated with this Service attribute.
 // Must use static mut fixed sized array, as it will be changed by Service to assign handles.
@@ -199,10 +211,12 @@ static mut DEVICE_INFO_TABLE: [GattAttribute; 9] = [
     },
 ];
 
+// ported from DevInfo_AddService in devinfoservice.c
 #[inline]
 unsafe fn devinfo_init() {
     // DevInfo_AddService
     unsafe {
+        // ported from devInfo_ReadAttrCB in devinfoservice.c
         unsafe extern "C" fn dev_info_on_read_attr(
             _conn_handle: u16,
             attr: *mut GattAttribute,
@@ -240,6 +254,7 @@ unsafe fn devinfo_init() {
 
             return 0;
         }
+        // ported from devInfoCBs in devinfoservice.c
         static DEV_INFO_SERVICE_CB: gattServiceCBs_t = gattServiceCBs_t {
             pfnReadAttrCB: Some(dev_info_on_read_attr),
             pfnWriteAttrCB: None,
@@ -256,16 +271,12 @@ unsafe fn devinfo_init() {
     }
 }
 
+// ported HID_FLAGS_REMOTE_WAKE, HID_FLAGS_NORMALLY_CONNECTABLE in hiddev.h
 // HID Service
-const HID_INFO_UUID: u16 = 0x2A4A;
-const HID_REPORT_MAP_UUID: u16 = 0x2A4B;
-const HID_CTRL_PT_UUID: u16 = 0x2A4C;
-const HID_REPORT_UUID: u16 = 0x2A4D;
-const HID_PROTO_MODE_UUID: u16 = 0x2A4E;
-
 const HID_KBD_FLAGS_REMOTE_WAKE: u8 = 0x01;
 const HID_KBD_FLAGS_NORMALLY_CONNECTABLE: u8 = 0x02;
 
+// ported from hidInfo in hidkbdservice.c
 static HID_INFO: [u8; 4] = [
     lo_u16(0x0111), // bcdHID
     hi_u16(0x0111),
@@ -273,6 +284,7 @@ static HID_INFO: [u8; 4] = [
     HID_KBD_FLAGS_REMOTE_WAKE | HID_KBD_FLAGS_NORMALLY_CONNECTABLE, // bFlags
 ];
 
+// ported from hidReportMap in hidkbdservice.c
 static HID_REPORT_MAP: &[u8] = &[
     0x05, 0x01, // USAGE_PAGE (Generic Desktop)
     0x09, 0x06, // USAGE (Keyboard)
@@ -308,10 +320,13 @@ static HID_REPORT_MAP: &[u8] = &[
     0xc0, // END_COLLECTION
 ];
 
+// ported from hidReportKeyInClientCharCfg in hidkbdservice.c
 static mut HID_REPORT_CLIENT_CHARCFG: [gattCharCfg_t; 4] = unsafe { core::mem::zeroed() };
+// ported from HID_PROTOCOL_MODE_REPORT in hidhev.h
 // HID report
 static mut HID_PROTOCOL_MODE: u8 = 1; // HID_PROTOCOL_MODE_REPORT
 
+// ported from hidAttrTbl in hidkbdservice.c
 static mut HID_ATTR_TABLE: [GattAttribute; 12] = [
     // HID Service
     GattAttribute {
@@ -417,7 +432,9 @@ static mut HID_ATTR_TABLE: [GattAttribute; 12] = [
     },
 ];
 
+// ported from Hid_AddService in hidkbdservice.c
 unsafe fn hid_init() {
+    // ported from HidDev_ReadAttrCB in hiddev.c
     unsafe extern "C" fn hid_on_read_attr(
         _conn_handle: u16,
         attr: *mut GattAttribute,
@@ -458,6 +475,7 @@ unsafe fn hid_init() {
         0
     }
 
+    // ported from HidDev_WriteAttrCB in hiddev.c
     unsafe extern "C" fn hid_on_write_attr(
         conn_handle: u16,
         attr: *mut GattAttribute,
@@ -509,6 +527,7 @@ unsafe fn hid_init() {
         0
     }
 
+    // ported from hidKbdCBs in hidkbdservice.c
     static HID_SERVICE_CB: gattServiceCBs_t = gattServiceCBs_t {
         pfnReadAttrCB: Some(hid_on_read_attr),
         pfnWriteAttrCB: Some(hid_on_write_attr),
@@ -519,6 +538,7 @@ unsafe fn hid_init() {
         .unwrap();
 }
 
+// ported from HidEmu_Init in hidkbd.c
 /// GAP Role init
 unsafe fn common_init() {
     // Setup the GAP Peripheral Role Profile
@@ -573,6 +593,7 @@ const LED_SERV_UUID: UUID = UUID::new_u128(&0x00001523_1212_EFDE_1523_785FEABCD1
 const BUTTON_STATE_UUID: UUID = UUID::new_u128(&0x00001524_1212_EFDE_1523_785FEABCD123);
 const LED_STATE_UUID: UUID = UUID::new_u128(&0x00001525_1212_EFDE_1523_785FEABCD123);
 
+// XXX: copied from the ble-led-button example
 static mut BUTTON_STATE_CLIENT_CHARCFG: [gattCharCfg_t; 4] = unsafe { core::mem::zeroed() };
 
 static mut BLINKY_ATTR_TABLE: [GattAttribute; 6] = [
@@ -712,7 +733,7 @@ unsafe fn lbs_init() {
 // App logic
 
 #[derive(Debug)]
-pub enum AppEvent {
+pub enum AppEvent { // XXX: copied from the ble-led-button example;
     Connected(u16),
     Disconnected(u16),
     ButtonStateSubscribed(u16),
@@ -724,6 +745,7 @@ pub enum AppEvent {
 
 static APP_CHANNEL: Channel<CriticalSectionRawMutex, AppEvent, 3> = Channel::new();
 
+// ported from DEFAULT_DESIRED_MIN_CONN_INTERVAL, etc. in hidkbd.c
 /// Default desired minimum connection interval (units of 1.25ms)
 const DEFAULT_DESIRED_MIN_CONN_INTERVAL: u16 = 8;
 /// Default desired maximum connection interval (units of 1.25ms)
@@ -733,13 +755,17 @@ const DEFAULT_DESIRED_SLAVE_LATENCY: u16 = 0;
 /// Default supervision timeout value (units of 10ms)
 const DEFAULT_DESIRED_CONN_TIMEOUT: u16 = 500;
 
+// same as ble-led-button;
+// ported from HID_HIGH_ADV_INT_MIN in hiddev.c
 // time units 625us
 const DEFAULT_FAST_ADV_INTERVAL: u16 = 32;
-const DEFAULT_FAST_ADV_DURATION: u16 = 30000;
+const DEFAULT_FAST_ADV_DURATION: u16 = 30000; // XXX no equivalent in the CH58x hid keyboard C code
 
+// HID_LOW_ADV_INT_MIN in hiddev.c is 160
 const DEFAULT_SLOW_ADV_INTERVAL: u16 = 1600;
-const DEFAULT_SLOW_ADV_DURATION: u16 = 0; // continuous
+const DEFAULT_SLOW_ADV_DURATION: u16 = 0; // continuous // XXX no equivalent in the CH58x hid keyboard C code
 
+// ported handling hiddev tmos START_DEVICE_EVT from HidDev_ProcessEvent in hiddev.c
 fn peripheral_start(task_id: u8) {
     // Profile State Change Callbacks
     unsafe extern "C" fn on_gap_state_change(new_state: gapRole_States_t, event: *mut gapRoleEvent_t) {
@@ -768,7 +794,7 @@ fn peripheral_start(task_id: u8) {
                 // link loss -- use fast advertising
                 let _ = GAP_SetParamValue(TGAP_DISC_ADV_INT_MIN, DEFAULT_FAST_ADV_INTERVAL);
                 let _ = GAP_SetParamValue(TGAP_DISC_ADV_INT_MAX, DEFAULT_FAST_ADV_INTERVAL);
-                let _ = GAP_SetParamValue(TGAP_GEN_DISC_ADV_MIN, DEFAULT_FAST_ADV_DURATION);
+                let _ = GAP_SetParamValue(TGAP_GEN_DISC_ADV_MIN, DEFAULT_FAST_ADV_DURATION); // XXX not set in CH58x hid keyboard code
 
                 // Enable advertising
                 let _ = GAPRole_SetParameter(GAPROLE_ADVERT_ENABLED, 1, &true as *const _ as _);
@@ -809,8 +835,9 @@ fn peripheral_start(task_id: u8) {
         LAST_STATE = new_state;
     }
 
-    // Deivce start
+    // Device start
     unsafe {
+        // ported from hidDevPasscodeCB in hiddev.c
         unsafe extern "C" fn on_gap_passcode_request(
             _device_addr: *mut u8,
             conn_handle: u16,
@@ -822,6 +849,7 @@ fn peripheral_start(task_id: u8) {
             GAPBondMgr_PasscodeRsp(conn_handle, 0, passcode); // SUCCESS is 0
         }
 
+        // ported from hidDevBondCB in hiddev.c
         static BOND_CB: gapBondCBs_t = gapBondCBs_t {
             passcodeCB: Some(on_gap_passcode_request),
             pairStateCB: None,
@@ -842,11 +870,14 @@ fn peripheral_start(task_id: u8) {
 static LED_STATE: AtomicBool = AtomicBool::new(false);
 static BUTTON_STATE: AtomicBool = AtomicBool::new(false);
 
+// ported from ble-led-button example
 // Only 1 connection is supported
 static CONN_HANDLE: AtomicU16 = AtomicU16::new(INVALID_CONNHANDLE);
 
+// ported from ble-led-button example, adapted to HID report subscription
 #[embassy_executor::task]
 async fn button_task(pin: AnyPin) {
+    // XXX button ported from ble-led-button example; unrelated to HID code in CH58x hid keyboard code
     // active low
     let button = Input::new(pin, Pull::Up);
 
@@ -954,9 +985,9 @@ async fn main(spawner: Spawner) -> ! {
     let _ = GAPRole::peripheral_init().unwrap();
 
     unsafe {
-        common_init();
-        devinfo_init();
-        hid_init();
+        common_init(); // HidEmu_Init
+        devinfo_init(); // DevInfo_AddService
+        hid_init(); // Hid_AddService
         lbs_init();
     }
 
@@ -1028,6 +1059,7 @@ async fn mainloop(task_id: u8, mut sub: EventSubscriber, led: AnyPin) -> ! {
     }
 }
 
+// ported from tmos handler for START_PARAM_UPDATE_EVT tmos task in HidEmu_ProcessEvent in hidkbd.c
 #[embassy_executor::task]
 async fn conn_param_update(conn_handle: u16, task_id: u8) {
     // 1600 * 625 us
@@ -1046,6 +1078,7 @@ async fn conn_param_update(conn_handle: u16, task_id: u8) {
     }
 }
 
+// ported from Main_Circulation in hidkbd_main.c (adapt to embassy async task)
 #[highcode]
 #[embassy_executor::task]
 async fn tmos_mainloop() {
@@ -1058,8 +1091,10 @@ async fn tmos_mainloop() {
     }
 }
 
+// ported from hidDev_ProcessTMOSMsg in hiddev.c
 fn handle_tmos_event(event: &TmosEvent) {
     match event.message_id() {
+        // ported from hidDevProcessGAPMsg in hiddev.c
         TmosEvent::GAP_MSG_EVENT => {
             // Peripheral_ProcessGAPMsg
             let msg = event.0 as *const gapRoleEvent_t;
@@ -1098,6 +1133,7 @@ fn handle_tmos_event(event: &TmosEvent) {
                 }
             }
         }
+        // ported from hidDevProcessGattMsg in hiddev.c
         TmosEvent::GATT_MSG_EVENT => {
             let msg = event.0 as *const gattMsgEvent_t;
             let method = unsafe { (*msg).method };
