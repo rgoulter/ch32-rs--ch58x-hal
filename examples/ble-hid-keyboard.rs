@@ -933,16 +933,7 @@ async fn main(spawner: Spawner) -> ! {
     let rtc = Rtc::new(p.RTC);
 
     println!();
-    println!("Hello World from ch58x-hal!");
-    println!(
-        r#"
-    ______          __
-   / ____/___ ___  / /_  ____ _____________  __
-  / __/ / __ `__ \/ __ \/ __ `/ ___/ ___/ / / /
- / /___/ / / / / / /_/ / /_/ (__  |__  ) /_/ /
-/_____/_/ /_/ /_/_.___/\__,_/____/____/\__, /
-                                      /____/   on CH582"#
-    );
+    println!("BLE HID Keyboard!");
     println!("System Clocks: {}", hal::sysctl::clocks().hclk);
     println!("ChipID: 0x{:02x}", hal::signature::get_chip_id());
     println!("RTC datetime: {}", rtc.now());
