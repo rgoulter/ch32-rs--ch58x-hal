@@ -338,6 +338,7 @@ unsafe fn devinfo_init() {
         };
         // DevInfo_AddService(); // Device Information Service
         // might fail, must check
+        println!("GATTServApp::register_service(): Registering Device Information Service with GATTServApp");
         GATTServApp::register_service(
             &mut DEVICE_INFO_TABLE[..],
             GATT_MAX_ENCRYPT_KEY_SIZE,
@@ -609,7 +610,9 @@ unsafe fn hid_init() {
         pfnWriteAttrCB: Some(hid_on_write_attr),
         pfnAuthorizeAttrCB: None,
     };
+    println!("GATTServApp::init_char_cfg(): initialize HID report client characteristic configuration");
     GATTServApp::init_char_cfg(INVALID_CONNHANDLE, HID_REPORT_CLIENT_CHARCFG.as_mut_ptr());
+    println!("GATTServApp::register_service(): Registering HID Service with GATTServApp");
     GATTServApp::register_service(&mut HID_ATTR_TABLE[..], GATT_MAX_ENCRYPT_KEY_SIZE, &HID_SERVICE_CB)
         .unwrap();
 }
@@ -620,6 +623,7 @@ unsafe fn common_init() {
     // Setup the GAP Peripheral Role Profile
     {
         // Set the GAP Role Parameters
+        println!("GAPRole_SetParameter(): Set up GAP Role Parameters");
         let _ = GAPRole_SetParameter(GAPROLE_ADVERT_ENABLED, 1, &true as *const _ as _);
         let _ = GAPRole_SetParameter(
             GAPROLE_SCAN_RSP_DATA,
@@ -630,6 +634,7 @@ unsafe fn common_init() {
     }
 
     // Set the GAP Characteristics
+    println!("GGS_SetParameter(): set the GAP characteristics");
     let _ = GGS_SetParameter(
         GGS_DEVICE_NAME_ATT,
         ATT_DEVICE_NAME.len() as _,
@@ -643,6 +648,7 @@ unsafe fn common_init() {
         let mitm = false;
         let io_cap = GAPBOND_IO_CAP_NO_INPUT_NO_OUTPUT;
         let bonding = true;
+        println!("GAPBondMgr_SetParameter(): set up the GAP Bond Manager");
         let _ = GAPBondMgr_SetParameter(
             GAPBOND_PERI_DEFAULT_PASSCODE,
             size_of_val(&passkey) as _,
@@ -656,7 +662,9 @@ unsafe fn common_init() {
 
     // Initialize GATT attributes
     {
+        println!("GGS_AddService(): initialize GATT attributes");
         let _ = GGS_AddService(GATT_ALL_SERVICES).unwrap(); // GAP
+        println!("GATTServApp_AddService(): initialize GATT attributes");
         let _ = GATTServApp::add_service(GATT_ALL_SERVICES).unwrap(); // GATT attributes
     }
 
@@ -771,6 +779,7 @@ unsafe fn lbs_init() {
         } else if uuid == gatt_uuid::GATT_CLIENT_CHAR_CFG_UUID {
             // client char cfg
 
+            println!("GATTServApp::process_ccc_write_req(): CCC write request for button state");
             let status =
                 GATTServApp::process_ccc_write_req(conn_handle, attr, value, len, offset, GATT_CLIENT_CFG_NOTIFY);
             if status.is_ok() {
@@ -802,7 +811,9 @@ unsafe fn lbs_init() {
     };
 
     // Initialize Client Characteristic Configuration attributes
+    println!("GATTServApp::init_char_cfg(): initialize button state client characteristic configuration");
     GATTServApp::init_char_cfg(INVALID_CONNHANDLE, BUTTON_STATE_CLIENT_CHARCFG.as_mut_ptr());
+    println!("GATTServApp::register_service(): Registering Blinky Service with GATTServApp");
     GATTServApp::register_service(&mut BLINKY_ATTR_TABLE[..], GATT_MAX_ENCRYPT_KEY_SIZE, &LBS_CB).unwrap();
 }
 
@@ -869,20 +880,25 @@ fn peripheral_start(task_id: u8) {
                 let _ = APP_CHANNEL.try_send(AppEvent::Disconnected(CURRENT_CONN_HANDLE));
 
                 // link loss -- use fast advertising
+                println!("GAP_SetParamValue(): link loss, switch to fast advertising");
                 let _ = GAP_SetParamValue(TGAP_DISC_ADV_INT_MIN, DEFAULT_FAST_ADV_INTERVAL);
                 let _ = GAP_SetParamValue(TGAP_DISC_ADV_INT_MAX, DEFAULT_FAST_ADV_INTERVAL);
                 let _ = GAP_SetParamValue(TGAP_GEN_DISC_ADV_MIN, DEFAULT_FAST_ADV_DURATION); // XXX not set in CH58x hid keyboard code
 
                 // Enable advertising
+                println!("GAPRole_SetParameter(): enable advertising");
                 let _ = GAPRole_SetParameter(GAPROLE_ADVERT_ENABLED, 1, &true as *const _ as _);
             }
             // if advertising stopped
             GAPROLE_WAITING if LAST_STATE == GAPROLE_ADVERTISING => {
                 // if fast advertising switch to slow
+                println!("GAP_GetParamValue(): advertising stopped, switch to slow advertising");
                 if GAP_GetParamValue(TGAP_DISC_ADV_INT_MIN) == DEFAULT_FAST_ADV_INTERVAL {
+                    println!("GAP_SetParamValue(): advertising stopped, switch to slow advertising");
                     let _ = GAP_SetParamValue(TGAP_DISC_ADV_INT_MIN, DEFAULT_SLOW_ADV_INTERVAL);
                     let _ = GAP_SetParamValue(TGAP_DISC_ADV_INT_MAX, DEFAULT_SLOW_ADV_INTERVAL);
                     let _ = GAP_SetParamValue(TGAP_GEN_DISC_ADV_MIN, DEFAULT_SLOW_ADV_DURATION);
+                    println!("GAPRole_SetParameter(): advertising stopped, switch to slow advertising");
                     let _ = GAPRole_SetParameter(GAPROLE_ADVERT_ENABLED, 1, &true as *const _ as _);
                 }
             }
@@ -890,6 +906,7 @@ fn peripheral_start(task_id: u8) {
             GAPROLE_STARTED => {
                 println!("gapRolesCBs_t.pfnStateChange: initialized");
                 let mut system_id = [0u8; 8]; // DEVINFO_SYSTEM_ID_LEN
+                println!("GAPRole_GetParameter()");
                 GAPRole_GetParameter(GAPROLE_BD_ADDR, system_id.as_mut_ptr() as _).unwrap();
 
                 // shift three bytes up
@@ -940,6 +957,7 @@ fn peripheral_start(task_id: u8) {
             pfnParamUpdate: None, // XXX hidDevParamUpdateCB not ported?
         };
         // Start the Device
+        println!("GAPRole_PeripheralStartDevice()");
         let r = GAPRole_PeripheralStartDevice(task_id, &BOND_CB, &APP_CB);
         println!("Start device; GAPRole_PeripheralStartDevice result={:?}", r);
     }
@@ -971,6 +989,7 @@ async fn button_task(pin: AnyPin) {
             continue;
         }
 
+        println!("GATTServApp::read_char_cfg()");
         let hid_cfg = unsafe { GATTServApp::read_char_cfg(conn_handle, HID_REPORT_CLIENT_CHARCFG.as_ptr()) };
 
         if hid_cfg & GATT_CLIENT_CFG_NOTIFY != 0 {
@@ -997,6 +1016,7 @@ async fn button_task(pin: AnyPin) {
                         NOTIFY_MSG.handleValueNoti.len = 8;
                         NOTIFY_MSG.handleValueNoti.handle = HID_ATTR_TABLE[4].handle;
 
+                        println!("GATT_Notification: sending notification for 'a' press");
                         let _ = GATT_Notification(conn_handle, &NOTIFY_MSG.handleValueNoti, 0).unwrap();
                     } else {
                         println!("in embassy button_task: press: GATT_bm_alloc failed");
@@ -1016,6 +1036,7 @@ async fn button_task(pin: AnyPin) {
                         NOTIFY_MSG.handleValueNoti.len = 8;
                         NOTIFY_MSG.handleValueNoti.handle = HID_ATTR_TABLE[4].handle;
 
+                        println!("GATT_Notification: sending notification for 'a' release");
                         let _ = GATT_Notification(conn_handle, &NOTIFY_MSG.handleValueNoti, 0).unwrap();
                     } else {
                         println!("in embassy button_task: release: GATT_bm_alloc failed");
@@ -1057,9 +1078,11 @@ async fn main(spawner: Spawner) -> ! {
     let mut ble_config = ble::Config::default();
     ble_config.pa_config = None;
     ble_config.use_factory_mac_address(); // load mac from factory flash
+    println!("hal::ble::init()");
     let (task_id, sub) = hal::ble::init(ble_config).unwrap();
     println!("BLE hal task id: {}", task_id);
 
+    println!("GAPRole::peripheral_init()");
     let _ = GAPRole::peripheral_init().unwrap();
 
     unsafe {
@@ -1093,6 +1116,7 @@ async fn mainloop(task_id: u8, mut sub: EventSubscriber, led: AnyPin) -> ! {
 
                         unsafe {
                             // N.B.: ignore result (c.f. hidkbd, HidEmu_ProcessEvent, START_PARAM_UPDATE_EVT)
+                            println!("GAPRole_PeripheralConnParamUpdateReq(): requesting connection parameter update");
                             let _ = GAPRole_PeripheralConnParamUpdateReq(
                                 conn_handle,
                                 DEFAULT_DESIRED_MIN_CONN_INTERVAL,
@@ -1104,6 +1128,7 @@ async fn mainloop(task_id: u8, mut sub: EventSubscriber, led: AnyPin) -> ! {
                         }
                     }
                     AppEvent::Disconnected(conn_handle) => unsafe {
+                        println!("GATTServApp::init_char_cfg()");
                         GATTServApp::init_char_cfg(conn_handle, BUTTON_STATE_CLIENT_CHARCFG.as_mut_ptr());
                         CONN_HANDLE.store(INVALID_CONNHANDLE, Ordering::Relaxed);
                     },
@@ -1144,6 +1169,7 @@ async fn conn_param_update(conn_handle: u16, task_id: u8) {
     Timer::after(Duration::from_secs(1)).await; // FIXME: spawn handler
 
     unsafe {
+        println!("GAPRole_PeripheralConnParamUpdateReq");
         GAPRole_PeripheralConnParamUpdateReq(
             conn_handle,
             DEFAULT_DESIRED_MIN_CONN_INTERVAL,
