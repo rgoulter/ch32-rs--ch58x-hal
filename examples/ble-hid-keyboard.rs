@@ -983,15 +983,15 @@ async fn mainloop(task_id: u8, mut sub: EventSubscriber, led: AnyPin) -> ! {
                         Timer::after(Duration::from_secs(1)).await; // FIXME: spawn handler
 
                         unsafe {
-                            GAPRole_PeripheralConnParamUpdateReq(
+                            // N.B.: ignore result (c.f. hidkbd, HidEmu_ProcessEvent, START_PARAM_UPDATE_EVT)
+                            let _ = GAPRole_PeripheralConnParamUpdateReq(
                                 conn_handle,
                                 DEFAULT_DESIRED_MIN_CONN_INTERVAL,
                                 DEFAULT_DESIRED_MAX_CONN_INTERVAL,
                                 DEFAULT_DESIRED_SLAVE_LATENCY,
                                 DEFAULT_DESIRED_CONN_TIMEOUT,
                                 task_id,
-                            )
-                            .unwrap();
+                            );
                         }
                     }
                     AppEvent::Disconnected(conn_handle) => unsafe {
