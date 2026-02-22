@@ -193,10 +193,12 @@ macro_rules! println {
     ($($arg:tt)*) => {
         unsafe {
             use core::fmt::Write;
+            use core::write;
             use core::writeln;
 
             if let Some(uart) = $crate::SERIAL.as_mut() {
                 writeln!(uart, $($arg)*).unwrap();
+                write!(uart, "\r").unwrap();
             }
         }
     }
