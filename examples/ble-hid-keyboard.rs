@@ -97,7 +97,14 @@ use hal::ble::gatt_uuid::{
     REPORT_UUID as HID_REPORT_UUID,
     PROTOCOL_MODE_UUID as HID_PROTO_MODE_UUID,
 };
-use hal::ble::gattservapp::*;
+use hal::ble::gattservapp::{
+    GATTServApp,
+    GATT_ALL_SERVICES,
+    GATT_CLIENT_CFG_NOTIFY,
+    GATT_MAX_ENCRYPT_KEY_SIZE,
+    gattCharCfg_t,
+    gattServiceCBs_t,
+};
 use hal::ble::{gatt_uuid, EventSubscriber, TmosEvent};
 use hal::gpio::{AnyPin, Input, Level, Output, OutputDrive, Pin, Pull};
 use hal::rtc::Rtc;
